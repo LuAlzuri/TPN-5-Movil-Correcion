@@ -1,5 +1,8 @@
 # Paso 7: integración y compilación
 
+> Estado histórico del paso 7. El paso 8 implementa el registro y reemplaza las
+> pruebas con tokens artificiales: consultar PASO-8-AUTENTICACION.md.
+
 ## Cambios
 
 La API vuelve a compilar con el modelo de encabezados, detalles y perfiles. No se

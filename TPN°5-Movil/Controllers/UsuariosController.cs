@@ -6,6 +6,7 @@ using TPN_5_MOVIL.Data;
 using TPN_5_MOVIL.DTOs;
 using TPN_5_MOVIL.Entities;
 using TPN_5_MOVIL.Exceptions;
+using TPN_5_MOVIL.Services;
 
 namespace TPN_5_MOVIL.Controllers;
 
@@ -76,7 +77,10 @@ public class UsuariosController : ControllerBase
         usuario.CUIT = request.CUIT;
         usuario.Email = request.Email;
         if (!string.IsNullOrWhiteSpace(request.Password))
+        {
+            AuthService.ValidarPassword(request.Password);
             usuario.PasswordHash = _passwordHasher.HashPassword(usuario, request.Password);
+        }
 
         await _db.SaveChangesAsync();
         return NoContent();

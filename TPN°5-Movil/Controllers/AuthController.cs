@@ -5,6 +5,7 @@ using TPN_5_MOVIL.Data;
 using TPN_5_MOVIL.DTOs;
 using TPN_5_MOVIL.Entities;
 using TPN_5_MOVIL.Services;
+using TPN_5_MOVIL.Security;
 
 namespace TPN_5_MOVIL.Controllers;
 
@@ -23,25 +24,24 @@ public class AuthController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
-    public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request)
+    public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
-        return Ok(await _authService.LoginAsync(request));
+        return Ok(await _authService.LoginAsync(request, cancellationToken));
     }
 
     [HttpPost("register")]
     [Authorize(Roles = Usuario.RolAdministrador)]
-    public async Task<ActionResult<UsuarioDto>> Register([FromBody] RegisterRequest request)
+    public async Task<ActionResult<UsuarioDto>> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
-        return CreatedAtAction(nameof(Register), await _authService.RegisterAsync(request));
+        var usuario = await _authService.RegisterAsync(request, cancellationToken);
+        return CreatedAtAction(nameof(UsuariosController.GetById), "Usuarios", new { id = usuario.Id }, usuario);
     }
 
     [HttpGet("me")]
     [Authorize]
     public async Task<ActionResult<UsuarioDto>> Me()
     {
-        var idClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (!int.TryParse(idClaim, out var id))
-            return Unauthorized();
+        var id = User.ObtenerUsuarioId();
 
         return await _db.Usuarios
             .AsNoTracking()
