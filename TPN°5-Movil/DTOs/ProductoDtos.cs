@@ -8,23 +8,19 @@ public record ProductoResponse(
     int Stock,
     string? ImagenUrl,
     int CategoriaId,
-    string CategoriaNombre,
-    int ProveedorId,
-    string ProveedorNombre);
+    string CategoriaNombre);
 
 public record ProductoCreateRequest(
     string Nombre,
     string? Descripcion,
     decimal Precio,
-    int CategoriaId,
-    int ProveedorId);
+    int CategoriaId);
 
 public record ProductoUpdateRequest(
     string Nombre,
     string? Descripcion,
     decimal Precio,
-    int CategoriaId,
-    int ProveedorId);
+    int CategoriaId);
 
 public record MovimientoItem(
     int Id,

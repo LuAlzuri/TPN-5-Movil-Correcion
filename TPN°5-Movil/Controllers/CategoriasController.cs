@@ -65,10 +65,10 @@ public class CategoriasController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = Usuario.RolAdmin)]
+    [Authorize(Roles = Usuario.RolAdministrador)]
     public async Task<ActionResult<CategoriaResponse>> Create([FromBody] CategoriaCreateRequest request)
     {
-        if (await _db.Categorias.AnyAsync(c => c.Nombre == request.Nombre))
+        if (await _db.Categorias.IgnoreQueryFilters().AnyAsync(c => c.Nombre == request.Nombre))
             throw new ApiException("Ya existe una categoría con ese nombre.", StatusCodes.Status409Conflict);
 
         var categoria = new Categoria
@@ -86,14 +86,14 @@ public class CategoriasController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = Usuario.RolAdmin)]
+    [Authorize(Roles = Usuario.RolAdministrador)]
     public async Task<IActionResult> Update(int id, [FromBody] CategoriaUpdateRequest request)
     {
         var categoria = await _db.Categorias.FindAsync(id);
         if (categoria is null)
             return NotFound();
 
-        if (await _db.Categorias.AnyAsync(c => c.Nombre == request.Nombre && c.Id != id))
+        if (await _db.Categorias.IgnoreQueryFilters().AnyAsync(c => c.Nombre == request.Nombre && c.Id != id))
             throw new ApiException("Ya existe una categoría con ese nombre.", StatusCodes.Status409Conflict);
 
         categoria.Nombre = request.Nombre;
@@ -104,17 +104,14 @@ public class CategoriasController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = Usuario.RolAdmin)]
+    [Authorize(Roles = Usuario.RolAdministrador)]
     public async Task<IActionResult> Delete(int id)
     {
         var categoria = await _db.Categorias.FindAsync(id);
         if (categoria is null)
             return NotFound();
 
-        if (await _db.Productos.AnyAsync(p => p.CategoriaId == id))
-            throw new ApiException("No se puede eliminar: la categoría tiene productos asociados.", StatusCodes.Status409Conflict);
-
-        _db.Categorias.Remove(categoria);
+        categoria.Eliminado = true;
         await _db.SaveChangesAsync();
         return NoContent();
     }

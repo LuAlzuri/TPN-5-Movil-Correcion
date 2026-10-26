@@ -10,85 +10,38 @@ namespace TPN_5_MOVIL.Controllers;
 
 [ApiController]
 [Route("api/ingresos")]
-[Authorize]
-public class IngresosController : ControllerBase
+// Client ownership queries are introduced with the complete checkout workflow.
+[Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
+public class IngresosController(AppDbContext db, MovimientoService movimientos) : ControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly MovimientoService _movimientoService;
-
-    public IngresosController(AppDbContext db, MovimientoService movimientoService)
-    {
-        _db = db;
-        _movimientoService = movimientoService;
-    }
-
     [HttpGet]
     public async Task<ActionResult<PaginatedResult<IngresoResponse>>> GetAll(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] int? productoId = null,
-        [FromQuery] int? proveedorId = null,
-        [FromQuery] DateTime? desde = null,
-        [FromQuery] DateTime? hasta = null)
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 10,
+        [FromQuery] int? productoId = null, [FromQuery] int? proveedorId = null,
+        [FromQuery] DateTime? desde = null, [FromQuery] DateTime? hasta = null)
     {
-        var query = _db.Ingresos
-            .AsNoTracking()
-            .AsQueryable();
-
-        if (productoId.HasValue)
-            query = query.Where(i => i.ProductoId == productoId);
-
-        if (proveedorId.HasValue)
-            query = query.Where(i => i.ProveedorId == proveedorId);
-
-        if (desde.HasValue)
-            query = query.Where(i => i.Fecha >= desde.Value);
-
-        if (hasta.HasValue)
-            query = query.Where(i => i.Fecha <= hasta.Value);
-
-        query = query.OrderByDescending(i => i.Fecha);
-
-        var result = await PaginatedResult<IngresoResponse>.CreateAsync(
-            query.Select(i => new IngresoResponse(
-                i.Id,
-                i.ProductoId,
-                i.Producto.Nombre,
-                i.ProveedorId,
-                i.Proveedor.Nombre,
-                i.Cantidad,
-                i.Fecha,
-                i.Observaciones)),
-            page,
-            pageSize);
-        return Ok(result);
+        var query = db.Ingresos.AsNoTracking();
+        if (productoId.HasValue) query = query.Where(x => x.Detalles.Any(d => d.ProductoId == productoId.Value));
+        if (proveedorId.HasValue) query = query.Where(x => x.ProveedorId == proveedorId.Value);
+        if (desde.HasValue) query = query.Where(x => x.Fecha >= desde.Value);
+        if (hasta.HasValue) query = query.Where(x => x.Fecha <= hasta.Value);
+        return Ok(await PaginatedResult<IngresoResponse>.CreateAsync(
+            query.OrderByDescending(x => x.Fecha).ThenByDescending(x => x.Id).Select(x => new IngresoResponse(x.Id, x.ProveedorId, x.EmpleadoId, x.Fecha, x.Observaciones, x.Confirmado, x.FechaConfirmacion, x.EmpleadoConfirmacionId,
+                x.Detalles.OrderBy(d => d.Id).Select(d => new DetalleIngresoResponse(d.Id, d.ProductoId, d.Cantidad, d.PrecioUnitario, d.DescAplicado)).ToList())), page, pageSize));
     }
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<IngresoResponse>> GetById(int id)
     {
-        var ingreso = await _db.Ingresos
-            .AsNoTracking()
-            .Where(i => i.Id == id)
-            .Select(i => new IngresoResponse(
-                i.Id,
-                i.ProductoId,
-                i.Producto.Nombre,
-                i.ProveedorId,
-                i.Proveedor.Nombre,
-                i.Cantidad,
-                i.Fecha,
-                i.Observaciones))
-            .FirstOrDefaultAsync();
-
-        return ingreso is null ? NotFound() : Ok(ingreso);
+        var result = await db.Ingresos.AsNoTracking().Where(x => x.Id == id).Select(x => new IngresoResponse(x.Id, x.ProveedorId, x.EmpleadoId, x.Fecha, x.Observaciones, x.Confirmado, x.FechaConfirmacion, x.EmpleadoConfirmacionId,
+                x.Detalles.OrderBy(d => d.Id).Select(d => new DetalleIngresoResponse(d.Id, d.ProductoId, d.Cantidad, d.PrecioUnitario, d.DescAplicado)).ToList())).FirstOrDefaultAsync();
+        return result is null ? NotFound() : Ok(result);
     }
 
     [HttpPost]
-    [Authorize(Roles = Usuario.RolAdmin)]
     public async Task<ActionResult<IngresoResponse>> Create([FromBody] IngresoRequest request)
     {
-        var ingreso = await _movimientoService.CrearIngresoAsync(request);
-        return CreatedAtAction(nameof(GetById), new { id = ingreso.Id }, ingreso);
+        var result = await movimientos.CrearIngresoAsync(request);
+        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 }

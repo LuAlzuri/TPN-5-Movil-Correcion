@@ -29,7 +29,7 @@ public class AuthService
         var usuario = await _db.Usuarios
             .FirstOrDefaultAsync(u => u.Email == request.Email);
 
-        if (usuario is null || !usuario.Activo)
+        if (usuario is null || usuario.Eliminado)
             throw new ApiException("Credenciales inválidas o usuario inactivo.", StatusCodes.Status401Unauthorized);
 
         var resultado = _passwordHasher.VerifyHashedPassword(usuario, usuario.PasswordHash, request.Password);
@@ -40,29 +40,12 @@ public class AuthService
         return new LoginResponse(
             token,
             DateTime.UtcNow.AddMinutes(int.Parse(_configuration["Jwt:ExpireMinutes"] ?? "120")),
-            new UsuarioDto(usuario.Id, usuario.NombreCompleto, usuario.Email, usuario.Rol, usuario.Activo));
+            new UsuarioDto(usuario.Id, usuario.Nombre, usuario.Apellido, usuario.CUIT, usuario.Email, usuario.Rol, usuario.Eliminado));
     }
 
-    public async Task<UsuarioDto> RegisterAsync(RegisterRequest request)
+    public Task<UsuarioDto> RegisterAsync(RegisterRequest request)
     {
-        var rol = request.Rol == Usuario.RolAdmin ? Usuario.RolAdmin : Usuario.RolUsuario;
-
-        if (await _db.Usuarios.AnyAsync(u => u.Email == request.Email))
-            throw new ApiException("Ya existe un usuario con ese email.", StatusCodes.Status409Conflict);
-
-        var usuario = new Usuario
-        {
-            NombreCompleto = request.NombreCompleto,
-            Email = request.Email,
-            Rol = rol,
-            Activo = true
-        };
-        usuario.PasswordHash = _passwordHasher.HashPassword(usuario, request.Password);
-
-        _db.Usuarios.Add(usuario);
-        await _db.SaveChangesAsync();
-
-        return new UsuarioDto(usuario.Id, usuario.NombreCompleto, usuario.Email, usuario.Rol, usuario.Activo);
+        throw new ApiException("El registro conjunto de cuentas y perfiles está pendiente de implementación.", StatusCodes.Status501NotImplemented);
     }
 
     private string GenerarToken(Usuario usuario)
@@ -73,7 +56,7 @@ public class AuthService
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
-            new Claim(ClaimTypes.Name, usuario.NombreCompleto),
+            new Claim(ClaimTypes.Name, (usuario.Nombre + " " + usuario.Apellido)),
             new Claim(ClaimTypes.Email, usuario.Email),
             new Claim(ClaimTypes.Role, usuario.Rol)
         };

@@ -66,3 +66,9 @@ Estas adaptaciones corresponden a los siguientes bloques de autorización.
 
 No se validó la ejecución del SQL en SQL Server. La descarga de su imagen estaba
 bloqueada por la red del entorno. Generar SQL y comprobar el modelo no sustituye esa prueba.
+
+## Actualización posterior
+
+El paso 7 recupera la compilación y documenta las operaciones temporalmente no
+disponibles. Consultar PASO-7-INTEGRACION.md para el estado actual; el estado de
+compilación descrito arriba corresponde exclusivamente al cierre del paso 1.
