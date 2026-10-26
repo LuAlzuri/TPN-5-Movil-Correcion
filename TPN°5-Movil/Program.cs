@@ -2,16 +2,21 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using System.Text;
 using TPN_5_MOVIL.Data;
 using TPN_5_MOVIL.Exceptions;
 using TPN_5_MOVIL.Services;
+using TPN_5_MOVIL.Security;
+using TPN_5_MOVIL.DTOs;
+using TPN_5_MOVIL.Entities;
 
-var builder = WebApplication.CreateBuilder(args);
+var bootstrapMode = args.Contains("--crear-administrador", StringComparer.Ordinal);
+var builder = WebApplication.CreateBuilder(args.Where(a => a != "--crear-administrador").ToArray());
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+var jwt = JwtSettings.Load(builder.Configuration);
+builder.Services.AddSingleton(jwt);
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<MovimientoService>();
 
@@ -22,15 +27,32 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
+    options.MapInboundClaims = false;
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        ValidAudience = builder.Configuration["Jwt:Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+        RequireSignedTokens = true,
+        RequireExpirationTime = true,
+        ValidIssuer = jwt.Issuer,
+        ValidAudience = jwt.Audience,
+        IssuerSigningKey = jwt.SigningKey,
+        ValidAlgorithms = new[] { SecurityAlgorithms.HmacSha256 },
+        NameClaimType = "name",
+        RoleClaimType = "role",
+        ClockSkew = TimeSpan.FromSeconds(30)
+    };
+    options.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            var auth = context.HttpContext.RequestServices.GetRequiredService<AuthService>();
+            if (context.Principal is null ||
+                !await auth.ValidarTokenAsync(context.Principal, context.HttpContext.RequestAborted))
+                context.Fail("Cuenta o perfil no disponible.");
+        }
     };
 });
 
@@ -87,10 +109,24 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-/*using (var scope = app.Services.CreateScope())
+// Explicit bootstrap against an already migrated database. No automatic seed or migration.
+if (bootstrapMode)
 {
-    await DbInitializer.InitializeAsync(scope.ServiceProvider);
-}*/
+    using var scope = app.Services.CreateScope();
+    var config = app.Configuration;
+    var auth = scope.ServiceProvider.GetRequiredService<AuthService>();
+    await auth.CrearAdministradorInicialAsync(new RegisterRequest
+    {
+        Nombre = config["Bootstrap:Nombre"] ?? string.Empty,
+        Apellido = config["Bootstrap:Apellido"] ?? string.Empty,
+        CUIT = config["Bootstrap:CUIT"] ?? string.Empty,
+        Email = config["Bootstrap:Email"] ?? string.Empty,
+        Password = config["Bootstrap:Password"] ?? string.Empty,
+        Rol = Usuario.RolAdministrador
+    });
+    Console.WriteLine("Administrador inicial creado. No se inició el servidor HTTP.");
+    return;
+}
 
 app.UseStaticFiles();
 
@@ -128,3 +164,5 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+// Required for WebApplicationFactory integration tests.
+public partial class Program { }
