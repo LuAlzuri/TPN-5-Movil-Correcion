@@ -7,15 +7,11 @@ public class Producto
     public string? Descripcion { get; set; }
     public decimal Precio { get; set; }
     public int Stock { get; set; }
-    public string? ImagenUrl { get; set; }
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
-
+    public bool Eliminado { get; set; }
     public int CategoriaId { get; set; }
     public Categoria Categoria { get; set; } = null!;
-
-    public int ProveedorId { get; set; }
-    public Proveedor Proveedor { get; set; } = null!;
-
-    public List<Ingreso> Ingresos { get; set; } = new();
-    public List<Salida> Salidas { get; set; } = new();
+    public Imagen? Imagen { get; set; }
+    public List<DetalleIngreso> DetallesIngreso { get; set; } = new();
+    public List<DetalleSalida> DetallesSalida { get; set; } = new();
 }
