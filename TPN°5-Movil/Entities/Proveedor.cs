@@ -8,7 +8,6 @@ public class Proveedor
     public string? Email { get; set; }
     public string? Telefono { get; set; }
     public string? Direccion { get; set; }
-
-    public List<Producto> Productos { get; set; } = new();
+    public bool Eliminado { get; set; }
     public List<Ingreso> Ingresos { get; set; } = new();
 }

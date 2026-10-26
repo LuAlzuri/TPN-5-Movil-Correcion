@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.11"><PrivateAssets>all</PrivateAssets></PackageReference>
+    <Compile Include="../../TPN°5-Movil/Entities/*.cs" Link="Entities/%(Filename)%(Extension)" />
+    <Compile Include="../../TPN°5-Movil/Data/AppDbContext.cs" Link="AppDbContext.cs" />
+    <Compile Include="../../TPN°5-Movil/Migrations/*.cs" Link="Migrations/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>
