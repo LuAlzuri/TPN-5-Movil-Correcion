@@ -32,20 +32,23 @@ API: `TPN°5-Movil`, ASP.NET Core con .NET 9, EF Core 9 y SQL Server.
 
 ## 1 Estado actual y próximo bloque
 
-La API compila sin advertencias y la última suite aprobó 119 pruebas en SQLite
-aislada, con 0 fallidas y 0 omitidas. El registro transaccional, la autenticación y los CRUD de
-categorías, empleados, clientes y proveedores están implementados. El paso 9.4 de
-proveedores está publicado en el PR #9, abierto para revisión y pendiente de
-integración por el usuario. Los resultados figuran en la sección 14.
+La última suite ejecutada aprobó 165 pruebas en SQLite aislada, con 0 fallidas y
+0 omitidas. Después de esa ejecución el usuario pidió eliminar todas las pruebas
+exitosas: se retiraron la carpeta tests y su proyecto de la solución. Los resultados
+se conservan como evidencia histórica, sin una suite versionada actual.
+El registro transaccional, la autenticación y los CRUD de
+categorías, empleados, clientes y proveedores están implementados. El paso 9.5 de
+productos e imágenes está publicado en el PR #10, abierto para revisión y pendiente
+de integración por el usuario. Los resultados figuran en la sección 14.
 La unicidad de CUIT/CUIL entre clientes y entre proveedores tiene migraciones propias.
 
-Los PR del 1 al 8 están integrados en `main`, según las comprobaciones realizadas
-al iniciar el paso 9.4. El último es el PR #8, integrado mediante
-`5fdbbc4`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
+Los PR del 1 al 9 están integrados en `main`, según las comprobaciones realizadas
+al iniciar el paso 9.5. El último es el PR #9, integrado mediante
+`c81dad3`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
 automáticamente por estar escrito aquí.
 
 La API todavía no está terminada funcionalmente. El próximo bloque es el **paso
-9.5, revisión integral de productos e imágenes**, pendiente de revisión de alcance
+10, flujo completo de ingresos y stock**, pendiente de revisión de alcance
 y autorización. El flujo de inventario continúa pendiente de sus propios bloques.
 
 | Área | Estado vigente |
@@ -57,8 +60,8 @@ y autorización. El flujo de inventario continúa pendiente de sus propios bloqu
 | Empleados | Paso 9.2 implementado |
 | CUIT/CUIL único en clientes y proveedores | Implementado; dos migraciones nuevas |
 | CRUD completo de clientes | Paso 9.3 integrado en PR #8 |
-| CRUD completo de proveedores | Paso 9.4 publicado en PR #9; pendiente de integración |
-| Productos e imágenes | CRUD base adaptado; revisión e imágenes pendientes |
+| CRUD completo de proveedores | Paso 9.4 integrado en PR #9 |
+| Productos e imágenes | Paso 9.5 publicado en PR #10; pendiente de integración |
 | Ingresos y stock | Flujo funcional pendiente |
 | Salidas, carrito y stock | Flujo funcional pendiente |
 | Auditoría completa e históricos autorizados | Pendientes |
@@ -69,7 +72,6 @@ controles de autorización y validación de entrada que correspondan:
 
 - `POST /api/usuarios`.
 - Creación de ingresos y salidas mediante sus servicios actuales.
-- `POST /api/productos/{id}/imagen`, con una petición multipart válida.
 
 Los tres tipos de cuenta pueden crearse mediante `POST /api/auth/register`,
 exclusivo de Administrador. Los empleados y clientes también pueden crearse
@@ -157,7 +159,7 @@ Una categoría puede tener varios productos.
 `Imagen.ProductoId` tiene índice único: cada producto admite cero o una imagen.
 Los archivos deben almacenarse en `wwwroot/uploads`. `ImagenUrl` se obtiene de
 los metadatos de Imagen, actualmente de `RutaRelativa`; no se duplica como
-columna persistida de Producto. La carga funcional de archivos sigue pendiente.
+columna persistida de Producto. El paso 9.5 incorpora la carga funcional de archivos.
 
 ### 3.3 Movimientos
 
@@ -440,9 +442,10 @@ implementó después en el paso 9.3.
 
 ## 11 CRUD implementados y contratos pendientes
 
-Clientes está implementado en el paso 9.3 y proveedores en el 9.4. Los apartados
+Clientes está implementado en el paso 9.3, proveedores en el 9.4 y productos e
+imágenes en el 9.5. Los apartados
 pendientes describen código de transición, no una validación integral de esos CRUD.
-Los límites estrictos de paginado de categorías, empleados, clientes y proveedores no
+Los límites estrictos de paginado de categorías, empleados, clientes, proveedores y productos no
 deben darse por implementados en todas las rutas: el helper general todavía
 normaliza page a un mínimo de 1 y pageSize al intervalo 1 a 100.
 
@@ -557,27 +560,99 @@ continúa temporalmente en 501 y no se implementa en este bloque.
 No se agregan endpoints de auditoría ni se cambia el modelo o el esquema. Los
 históricos completos siguen pendientes de sus propias consultas autorizadas.
 
-### 11.4 Productos e imágenes
+### 11.4 Productos e imágenes del paso 9.5
 
-GET paginado de productos admite `busqueda`, `categoriaId` y `proveedorId`, además
-de page/pageSize. La búsqueda actual consulta nombre y descripción; el proveedor
-se obtiene recorriendo detalles de ingreso. GET por ID devuelve los datos del
-producto, su categoría e ImagenUrl desde Imagen.RutaRelativa.
+| Método | Ruta | Permisos y comportamiento |
+| --- | --- | --- |
+| GET | `/api/productos` | Administrador, Empleado y Cliente autenticados; listado paginado |
+| GET | `/api/productos/{id}` | Los mismos tres roles; producto activo con categoría e ImagenUrl |
+| GET | `/api/productos/{id}/movimientos` | Administrador y Empleado; movimientos confirmados |
+| POST | `/api/productos` | Administrador y Empleado; 201 y Location; stock inicial 0 |
+| PUT | `/api/productos/{id}` | Administrador y Empleado; edición de catálogo; 204 |
+| DELETE | `/api/productos/{id}` | Administrador y Empleado; soft delete; 204 |
+| POST | `/api/productos/{id}/imagen` | Administrador y Empleado; multipart con campo file; 200 con metadatos |
 
-POST y PUT requieren Administrador o Empleado, precio no negativo y categoría
-activa. POST fija Stock en 0. Sus contratos no reciben proveedor directo ni
-permiten modificar stock desde la edición común. DELETE hace soft delete.
-La revisión integral del CRUD y carga de imágenes sigue pendiente.
+Los DTOs requieren Nombre hasta 150, Precio y CategoriaId positivo. Descripcion
+es opcional hasta 1000. Precio debe estar entre 0 y 9999999999999999.99 con hasta
+dos decimales: entradas de mayor precisión no se redondean silenciosamente.
+Omitir precio o categoría devuelve 400. Se rechazan campos desconocidos como
+Stock, ProveedorId, ImagenUrl o Eliminado. Nombre y descripción se recortan;
+descripción vacía se guarda como null.
 
-`GET /api/productos/{id}/movimientos` está restringido a Administrador/Empleado.
-Combina solo ingresos confirmados y salidas confirmadas por empleado, ordena por
-fecha descendente, pagina e incluye contraparte. Usa cantidades negativas para
-salidas. No es la auditoría completa de registros eliminados.
+Crear requiere categoría activa; reasignar requiere otra categoría activa.
+Conservar una categoría histórica eliminada está permitido al editar, a diferencia
+del comportamiento anterior que rechazaba toda edición en ese caso. El producto
+existente sigue visible con su categoría e imagen después de eliminar la categoría.
+Las consultas omiten filtros globales para conservar esas referencias y mantienen
+explícitamente `!Producto.Eliminado`.
 
-La carga multipart de imagen usa el campo `file` y está en 501. El controlador
-mantiene un límite de 5 MiB más 1024 bytes de margen para la petición. El PDF antiguo
-documentaba jpg/jpeg/png/webp hasta 5 MB; confirmar e implementar formato, validación
-y límites efectivos al autorizar ese bloque, sin afirmar que ya funcionan.
+El listado usa page positivo, pageSize de 1 a 100 (1 y 10 por defecto), busqueda,
+categoriaId y proveedorId. Los filtros de ID deben ser positivos; IDs positivos
+sin coincidencias y páginas fuera del resultado devuelven Items vacío. Ordena
+por Nombre e Id. La búsqueda recortada consulta nombre o descripción, incluida
+descripción null. El filtro proveedor recorre detalles de ingresos no eliminados;
+no crea proveedor directo ni exige confirmación para ese filtro.
+
+Los movimientos combinan ingresos confirmados y salidas confirmadas por empleado,
+excluyendo encabezados eliminados explícitamente. Conservan contrapartes históricas
+aunque proveedor, cliente o empleados estén eliminados. Ordenan por Fecha
+descendente, Tipo, Id de encabezado e Id de detalle. Las salidas usan cantidades
+negativas y el precio unitario histórico. Se valida el paginado. No habilitan
+auditoría completa ni movimientos de productos eliminados, que siguen en 404.
+
+El CRUD y la carga de imágenes no modifican el stock salvo inicializarlo en 0 al
+crear. El soft delete conserva relaciones, metadatos y archivo de imagen. El
+producto eliminado queda fuera de listado, detalle, edición y nuevas cargas.
+
+#### Validación y almacenamiento de imágenes
+
+Se admiten JPG/JPEG, PNG y WebP hasta 5 MiB de archivo inclusive. Deben coincidir
+extensión, MIME (image/jpeg, image/png o image/webp) y formato real. SkiaSharp
+decodifica píxeles para rechazar contenido falso o incompleto. Se aceptan imágenes
+estáticas de hasta 8192 píxeles por lado y 20 megapíxeles para acotar memoria.
+Archivos vacíos, formatos inválidos, contenido dañado o dimensiones no admitidas
+devuelven 400; archivo mayor a 5 MiB devuelve 413. La petición tiene 64 KiB
+adicionales para multipart. Una petición sin file devuelve 400.
+
+El archivo validado se conserva sin recodificar, incluidos sus metadatos originales.
+Se guarda bajo wwwroot/uploads con nombre GUID generado y extensión del formato
+(.jpeg se guarda como .jpg), sin usar la ruta aportada por el cliente.
+ImagenResponse contiene Id, ProductoId, NombreArchivo, ImagenUrl, TipoContenido
+y TamanoBytes. La URL de producto deriva de Imagen.RutaRelativa, sin columna nueva.
+
+Se conserva el comportamiento de archivos estáticos de la aplicación: la URL
+`/uploads/<nombre>` es pública, incluso si luego se elimina lógicamente el producto.
+Listado y detalle de catálogo requieren autenticación, pero conocer la URL permite
+descargar el archivo. Se agrega `X-Content-Type-Options: nosniff`.
+
+ImagenProductoService valida antes de escribir. IAlmacenImagenes guarda el archivo
+nuevo con FileMode.CreateNew. Una transacción Serializable hace una actualización
+condicionada sin cambio de Nombre sobre el producto activo para mantener su bloqueo
+hasta confirmar y serializar cargas/borrado sin RowVersion. Se inserta o actualiza
+la única Imagen por producto, manteniendo su Id al reemplazar. Solo después del
+commit se intenta limpiar el archivo anterior.
+
+Un fallo antes de intentar commit revierte la base y limpia el nuevo archivo;
+el anterior permanece intacto. Un fallo de escritura limpia su parcial. Base y
+filesystem no comparten una transacción distribuida: si se pierde la confirmación
+de commit se conservan ambos archivos y se registra una advertencia para revisión,
+evitando borrar uno posiblemente referenciado. Si falla la limpieza posterior,
+la imagen nueva sigue válida y puede quedar un huérfano para reconciliar. La
+limpieza solo admite nombres generados; no borra rutas arbitrarias ni archivos
+históricos de wwwroot/upload.
+
+wwwroot/uploads queda excluido de Git y del contenido de publicación. Al desplegar,
+conservar y respaldar ese almacenamiento persistente junto con la base, sin
+reemplazarlo por una carpeta vacía. La carpeta original wwwroot/upload se conserva
+sin migración automática. La validación usó web roots temporales aislados y los
+limpió al terminar. Sus fuentes se retiraron luego por instrucción del usuario.
+
+Se agregan [SkiaSharp 4.153.1](https://www.nuget.org/packages/SkiaSharp/4.153.1)
+y Linux.NoDependencies de igual versión, condicionado a host Linux o RID linux-x64/
+linux-arm64. El paquete principal aporta runtimes Windows/macOS. Validar el RID
+y las bibliotecas nativas al desplegar; selección de paquetes según la
+[documentación oficial](https://github.com/mono/SkiaSharp/blob/main/documentation/dev/packages.md).
+No se cambian las once entidades, sus relaciones ni las trece migraciones.
 
 ### 11.5 Ingresos y salidas
 
@@ -682,7 +757,7 @@ Actualmente hay 13 migraciones: las once iniciales y estas dos del ajuste de CUI
 | `20261026210457_CuilUnicoClientes` | CUITNormalizado calculado en Usuarios e índice único filtrado por rol Cliente |
 | `20261026210619_CuilUnicoProveedores` | CUITNormalizado calculado en Proveedores e índice único sin filtro |
 
-No hubo cambios de esquema en los pasos 7, 8, 9.1, 9.2, 9.3 ni 9.4; no se crearon migraciones
+No hubo cambios de esquema en los pasos 7, 8, 9.1, 9.2, 9.3, 9.4 ni 9.5; no se crearon migraciones
 vacías. El snapshot vigente está en `TPN°5-Movil/Migrations`, para que lo descubra
 tanto la API como el proyecto auxiliar.
 
@@ -753,30 +828,34 @@ El despliegue debe coordinar esquema y código; integrar un PR no migra la base.
 
 ## 14 Pruebas y límites de la validación
 
-### 14.1 Comandos vigentes
+### 14.1 Verificación vigente y retiro de la suite
 
 Desde la raíz:
 
 ```powershell
-dotnet build 'TPN°5-Movil/TPN°5-Movil.csproj'
-dotnet test tests/Auth.Integration/Auth.Integration.csproj
+dotnet build 'TPN°5-Movil.slnx'
 dotnet run --project tools/Schema/Schema.csproj
 ```
 
-La suite predeterminada usa SQLite en memoria, aislada por caso. No requiere
-credenciales reales. WebApplicationFactory ejecuta la canalización HTTP, los
-servicios reales y las transacciones. Las claves y contraseñas del fixture son
-solo de prueba y no configuran el arranque normal.
+Tras aprobar las 165 pruebas del paso 9.5, el usuario pidió eliminar todas las
+pruebas exitosas. Se quitaron tests/Auth.Integration y su referencia en la solución,
+incluidas las fuentes de autenticación, categorías, empleados, clientes, CUIL,
+proveedores, productos e imágenes. No queda proyecto de pruebas versionado.
+El comando `dotnet test tests/Auth.Integration/Auth.Integration.csproj` deja de
+ser un comando vigente. La instrucción de retiro prevalece sobre las referencias
+históricas anteriores. tools/Schema se conserva como herramienta de migraciones
+e inspección del modelo; no es el proyecto de pruebas retirado.
 
-La variable opcional `AUTH_TEST_SQLSERVER_CONNECTION` cambia a SQL Server:
-usarla únicamente contra una instancia descartable. Cada fixture crea una base
-`TPN5_AuthTest_<GUID>` y aplica migraciones reales. Requiere permiso para crear
-bases; permanecen hasta descartar la instancia. No usar una base o servidor
-personal o de producción por comodidad. Las pruebas de rollback crean triggers
-o restricciones solo en esas bases aisladas.
+La suite retirada usaba SQLite en memoria, aislada por caso, sin credenciales
+reales. WebApplicationFactory ejercitaba HTTP, servicios y transacciones; los
+archivos de imágenes iban a carpetas temporales independientes. Con la variable
+AUTH_TEST_SQLSERVER_CONNECTION podía crear bases TPN5_AuthTest_<GUID> y aplicar
+migraciones en una instancia descartable. Esta descripción es histórica: el
+paso 9.5 se ejecutó en SQLite, sin usar ni modificar una base personal.
 
 `tools/smoke_step7.py` es histórico: firmaba tokens artificiales sin cuenta real
-que ya no sirven para rutas autenticadas. No sustituye la suite actual.
+que ya no sirven para rutas autenticadas. No sustituye la validación retirada
+ni debe interpretarse como una suite vigente.
 
 ### 14.2 Evidencia por entrega
 
@@ -790,16 +869,17 @@ que ya no sirven para rutas autenticadas. No sustituye la suite actual.
 | Unicidad de CUIL | 72 pruebas, 0 fallidas y 0 omitidas; verificación de 13 migraciones | Funcionales en SQLite; SQL generado/revisado, sin ejecutar las dos migraciones nuevas en SQL Server real |
 | Paso 9.3 | 99 pruebas, 0 fallidas y 0 omitidas; compilación sin advertencias | Funcionales en SQLite; sin pruebas funcionales en SQL Server ni migraciones nuevas |
 | Paso 9.4 | 119 pruebas, 0 fallidas y 0 omitidas; compilación sin advertencias | Funcionales en SQLite; sin pruebas funcionales en SQL Server ni migraciones nuevas |
+| Paso 9.5 | 165 pruebas, 0 fallidas y 0 omitidas; compilación sin advertencias | Funcionales en SQLite y filesystem temporal en Windows; sin pruebas funcionales en SQL Server/Linux; suite retirada después por instrucción del usuario |
 
 Los números son totales de la suite en cada entrega, no cantidades acumulables.
 Durante el paso 8 se aplicaron las once migraciones iniciales a bases nuevas de
 prueba y se probó el CLI del primer Administrador, incluido el rechazo de la
 segunda creación. La instancia descartable se detuvo al terminar.
 
-La suite actual cubre autenticación, perfiles, permisos, revocación, CORS,
+La última suite, retirada tras aprobar, cubrió autenticación, perfiles, permisos, revocación, CORS,
 categorías, empleados, clientes, proveedores, rollback en creación/edición, paginado, conservación de
 históricos y CUIT/CUIL único, incluyendo formatos equivalentes, eliminados,
-rutas alternativas y rechazo directo por índices. Confirma que el modelo SQL
+rutas alternativas y rechazo directo por índices. Confirmó que el modelo SQL
 Server coincide con el snapshot sin abrir una conexión.
 
 tools/Schema comprueba once entidades, PK compartidas, ausencia de RowVersion,
@@ -824,7 +904,22 @@ y en longitudes máximas; rechazo de campos desconocidos; búsqueda con email nu
 orden estable y paginado; duplicados activos y eliminados; y preservación de
 ingresos confirmados, detalles y stock tras soft delete. No se aplicaron migraciones
 ni se modificaron bases personales. La comparación del modelo SQL Server con el
-snapshot sigue incluida en la suite, sin abrir conexión.
+snapshot estuvo incluida en esa suite, sin abrir conexión, antes de su retiro.
+
+El paso 9.5 agregó 46 casos a los 119 anteriores. Verificó permisos, validación y
+límites de precio, categorías activas al crear/reasignar, conservación de categoría
+histórica, paginado, filtros y contrapartes eliminadas. Las pruebas de imágenes
+validaron JPG/JPEG/PNG/WebP reales, archivos inválidos, tamaño, dimensiones,
+metadatos, descarga estática, reemplazo sin duplicar filas, conservación al soft
+delete, fallos de disco/base, cancelación de escritura, borrado del producto
+durante la carga y confirmación de commit perdida. Todas aprobaron antes del retiro.
+No hubo cambio de esquema ni migraciones nuevas. No se afirma que estas pruebas
+sean ejecutables desde el checkout posterior a su eliminación.
+
+Después del retiro se compiló la solución sin errores ni advertencias y se
+ejecutó tools/Schema: confirmó once entidades, trece migraciones y las restricciones
+del modelo, sin conectar a una base. El retiro no deja referencias rotas al
+proyecto de pruebas en la solución.
 
 ## 15 Plan de trabajo y alcance por autorizar
 
@@ -844,9 +939,9 @@ El plan original se mantiene con los siguientes estados:
 | 9.2 | CRUD de empleados | Implementado |
 | Ajuste adicional | CUIT/CUIL único en clientes y proveedores | Implementado |
 | 9.3 | CRUD de clientes | Implementado e integrado en PR #8 |
-| 9.4 | CRUD de proveedores | Implementado y publicado en PR #9; pendiente de integración |
-| 9.5 | CRUD de productos e imágenes | Próximo bloque; alcance por autorizar |
-| 10 | Flujo completo de ingresos y stock | Pendiente |
+| 9.4 | CRUD de proveedores | Implementado e integrado en PR #9 |
+| 9.5 | CRUD de productos e imágenes | Implementado y publicado en PR #10; pendiente de integración |
+| 10 | Flujo completo de ingresos y stock | Próximo bloque; alcance por autorizar |
 | 11 | Flujo completo de salidas y stock | Pendiente |
 | 12 | Validación integral y entrega | Pendiente |
 
@@ -868,15 +963,25 @@ modificar entidades ni generar migraciones. La autorización cubre implementaci�
 local y pruebas. Posteriormente el usuario autorizó el commit y la subida de esta
 entrega a una rama para revisarla mediante PR. El merge queda a su cargo.
 
-Para el paso 9.5 revisar ProductosController, sus DTOs y el flujo de imágenes:
-validación, permisos, paginado, asociaciones activas, archivo en wwwroot/uploads,
-metadatos y unicidad de imagen por producto. Presentar el alcance antes de editar,
-definiendo las lecturas de catálogo que necesite Cliente, sin modificar stock
-desde el CRUD común ni avanzar al flujo de ingresos/salidas en ese bloque.
+El usuario autorizó el paso 9.5 con el alcance de la sección 11.4: controlador,
+DTOs, servicios de imágenes, almacenamiento/configuración, dependencias, pruebas y
+este documento. Se conservan stock, históricos y esquema. La autorización cubre
+implementación local y pruebas. Posteriormente autorizó el commit y la subida de
+esta entrega a una rama para revisión mediante PR. El merge queda a su cargo.
+Después de la validación el usuario autorizó retirar todas las pruebas que habían
+pasado; se elimina el proyecto tests/Auth.Integration y su referencia en la solución.
+No se agregan nuevamente esas pruebas por suposición en los siguientes bloques;
+sus resultados quedan registrados en este documento.
+
+Antes del paso 10 revisar encabezados, detalles, permisos de Empleado,
+proveedores/productos activos, identidad desde JWT, confirmación, precios y
+descuentos históricos, totales y redondeo, reversión y concurrencia de stock.
+Presentar alcance concreto antes de editar; no implementar salidas ni carrito
+dentro del mismo bloque.
 
 ## 16 Historial de entregas
 
-Estado verificado al preparar esta versión: PR #1 al #8 integrados; PR #9 abierto.
+Estado verificado al preparar esta versión: PR #1 al #9 integrados; PR #10 abierto.
 Los hashes de la columna Commit identifican el trabajo de cada rama.
 
 | Entrega | Rama | Commit | PR |
@@ -889,13 +994,14 @@ Los hashes de la columna Commit identifican el trabajo de cada rama.
 | CUIT/CUIL único | `codex/cuil-unico-clientes-proveedores` | `04fcb22` | [#6](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/6) |
 | Documentación unificada | `codex/documentacion-unificada` | `0d99f59` y `29fe5f6` | [#7](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/7) |
 | Clientes | `codex/paso-9-3-clientes` | `e1a12b7` y `535e869` | [#8](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/8) |
-| Proveedores | `codex/paso-9-4-proveedores` | `ad4267a` inicial | [#9 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/9) |
+| Proveedores | `codex/paso-9-4-proveedores` | `ad4267a` y `2a43284` | [#9](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/9) |
+| Productos e imágenes y retiro de pruebas | `codex/paso-9-5-productos-imagenes` | `9929183` inicial | [#10 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/10) |
 
-El PR #8 ya está integrado mediante `5fdbbc4`, comprobado al iniciar el paso 9.4.
-El paso 9.4 se publicó en `codex/paso-9-4-proveedores`, basada en `origin/main`
-con ese merge, mediante el commit inicial `ad4267a`. El PR #9 queda abierto para
-revisión; el merge sigue a cargo del usuario. Esta actualización del historial
-se publica como seguimiento documental en el mismo PR.
+El PR #9 ya está integrado mediante `c81dad3`, comprobado al iniciar el paso 9.5.
+El paso 9.5 se publicó en `codex/paso-9-5-productos-imagenes`, basada en
+`origin/main` con ese merge, mediante el commit inicial `9929183`. El PR #10 queda
+abierto para revisión; el merge sigue a cargo del usuario. Esta actualización del
+historial se publica como seguimiento documental en el mismo PR.
 
 ## 17 Fuentes originales y decisiones que las reemplazan
 
@@ -945,7 +1051,7 @@ el comportamiento de la API reestructurada. Estas diferencias están resueltas:
 | Crear ingreso/salida altera stock inmediatamente | Flujo por encabezados, detalles y confirmaciones, todavía pendiente |
 | Impedir eliminar categorías, proveedores, clientes o productos por tener relaciones | Soft delete conservando históricos; ingresos confirmados requieren reversión atómica según su regla propia |
 | Usuario con Activo editable | Usuario.Eliminado, sin restauración ni cambio de rol en edición común |
-| CRUD de clientes o carga de imágenes ya disponibles | El paso 9.3 completa clientes; la carga de imágenes sigue en 501 |
+| CRUD de clientes o carga de imágenes de la versión anterior | Los pasos 9.3 y 9.5 completan clientes e imágenes con los contratos actuales |
 | URL pública usada en las capturas | Referencia histórica; no asumir despliegue actual ni usarla como destino de pruebas sin verificar |
 
 No se copian tokens, credenciales ni capturas de autenticación del informe
