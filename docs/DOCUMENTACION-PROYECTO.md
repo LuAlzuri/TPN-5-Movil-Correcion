@@ -35,8 +35,8 @@ API: `TPN°5-Movil`, ASP.NET Core con .NET 9, EF Core 9 y SQL Server.
 La API compila sin advertencias y la última suite aprobó 119 pruebas en SQLite
 aislada, con 0 fallidas y 0 omitidas. El registro transaccional, la autenticación y los CRUD de
 categorías, empleados, clientes y proveedores están implementados. El paso 9.4 de
-proveedores está implementado con autorización del usuario, quien también autorizó
-su commit, subida y preparación del PR. Los resultados figuran en la sección 14.
+proveedores está publicado en el PR #9, abierto para revisión y pendiente de
+integración por el usuario. Los resultados figuran en la sección 14.
 La unicidad de CUIT/CUIL entre clientes y entre proveedores tiene migraciones propias.
 
 Los PR del 1 al 8 están integrados en `main`, según las comprobaciones realizadas
@@ -57,7 +57,7 @@ y autorización. El flujo de inventario continúa pendiente de sus propios bloqu
 | Empleados | Paso 9.2 implementado |
 | CUIT/CUIL único en clientes y proveedores | Implementado; dos migraciones nuevas |
 | CRUD completo de clientes | Paso 9.3 integrado en PR #8 |
-| CRUD completo de proveedores | Paso 9.4 implementado localmente |
+| CRUD completo de proveedores | Paso 9.4 publicado en PR #9; pendiente de integración |
 | Productos e imágenes | CRUD base adaptado; revisión e imágenes pendientes |
 | Ingresos y stock | Flujo funcional pendiente |
 | Salidas, carrito y stock | Flujo funcional pendiente |
@@ -844,7 +844,7 @@ El plan original se mantiene con los siguientes estados:
 | 9.2 | CRUD de empleados | Implementado |
 | Ajuste adicional | CUIT/CUIL único en clientes y proveedores | Implementado |
 | 9.3 | CRUD de clientes | Implementado e integrado en PR #8 |
-| 9.4 | CRUD de proveedores | Implementado; publicación autorizada para revisión |
+| 9.4 | CRUD de proveedores | Implementado y publicado en PR #9; pendiente de integración |
 | 9.5 | CRUD de productos e imágenes | Próximo bloque; alcance por autorizar |
 | 10 | Flujo completo de ingresos y stock | Pendiente |
 | 11 | Flujo completo de salidas y stock | Pendiente |
@@ -876,7 +876,7 @@ desde el CRUD común ni avanzar al flujo de ingresos/salidas en ese bloque.
 
 ## 16 Historial de entregas
 
-Estado verificado al preparar esta versión: PR #1 al #8 integrados.
+Estado verificado al preparar esta versión: PR #1 al #8 integrados; PR #9 abierto.
 Los hashes de la columna Commit identifican el trabajo de cada rama.
 
 | Entrega | Rama | Commit | PR |
@@ -889,11 +889,13 @@ Los hashes de la columna Commit identifican el trabajo de cada rama.
 | CUIT/CUIL único | `codex/cuil-unico-clientes-proveedores` | `04fcb22` | [#6](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/6) |
 | Documentación unificada | `codex/documentacion-unificada` | `0d99f59` y `29fe5f6` | [#7](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/7) |
 | Clientes | `codex/paso-9-3-clientes` | `e1a12b7` y `535e869` | [#8](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/8) |
+| Proveedores | `codex/paso-9-4-proveedores` | `ad4267a` inicial | [#9 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/9) |
 
 El PR #8 ya está integrado mediante `5fdbbc4`, comprobado al iniciar el paso 9.4.
-El paso 9.4 se prepara para publicación en `codex/paso-9-4-proveedores`, basada en
-`origin/main` con ese merge. El usuario autorizó el commit y la subida; registrar
-el commit y el PR reales al confirmar su creación. El merge queda a su cargo.
+El paso 9.4 se publicó en `codex/paso-9-4-proveedores`, basada en `origin/main`
+con ese merge, mediante el commit inicial `ad4267a`. El PR #9 queda abierto para
+revisión; el merge sigue a cargo del usuario. Esta actualización del historial
+se publica como seguimiento documental en el mismo PR.
 
 ## 17 Fuentes originales y decisiones que las reemplazan
 
