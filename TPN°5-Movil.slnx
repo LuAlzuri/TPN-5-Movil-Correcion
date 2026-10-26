@@ -1,4 +1,3 @@
 <Solution>
   <Project Path="TPN°5-Movil/TPN°5-Movil.csproj" />
-  <Project Path="tests/Auth.Integration/Auth.Integration.csproj" />
 </Solution>

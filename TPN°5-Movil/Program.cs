@@ -19,6 +19,8 @@ var jwt = JwtSettings.Load(builder.Configuration);
 builder.Services.AddSingleton(jwt);
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<MovimientoService>();
+builder.Services.AddScoped<ImagenProductoService>();
+builder.Services.AddSingleton<IAlmacenImagenes, AlmacenImagenes>();
 
 builder.Services.AddAuthentication(options =>
 {
@@ -128,7 +130,16 @@ if (bootstrapMode)
     return;
 }
 
-app.UseStaticFiles();
+var webRoot = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+Directory.CreateDirectory(webRoot);
+app.Environment.WebRootPath = webRoot;
+var webFiles = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(webRoot);
+app.Environment.WebRootFileProvider = webFiles;
+app.Lifetime.ApplicationStopped.Register(webFiles.Dispose);
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = context => context.Context.Response.Headers["X-Content-Type-Options"] = "nosniff"
+});
 
 app.UseCors();
 
@@ -137,6 +148,11 @@ app.Use(async (context, next) =>
     try
     {
         await next();
+    }
+    catch (BadHttpRequestException ex)
+    {
+        context.Response.StatusCode = ex.StatusCode;
+        await context.Response.WriteAsJsonAsync(new { error = "Petición de archivo inválida o demasiado grande." });
     }
     catch (ApiException ex)
     {
