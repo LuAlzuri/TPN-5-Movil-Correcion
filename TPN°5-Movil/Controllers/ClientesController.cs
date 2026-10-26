@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using TPN_5_MOVIL.Data;
 using TPN_5_MOVIL.DTOs;
 using TPN_5_MOVIL.Entities;
 using TPN_5_MOVIL.Exceptions;
+using TPN_5_MOVIL.Services;
 
 namespace TPN_5_MOVIL.Controllers;
 
@@ -79,20 +81,26 @@ public class ClientesController : ControllerBase
         if (cliente is null)
             return NotFound();
 
-        if (await _db.Clientes.IgnoreQueryFilters().AnyAsync(c => c.Usuario.CUIT == request.CUIT && c.Id != id))
-            throw new ApiException("Ya existe un cliente con ese CUIT.", StatusCodes.Status409Conflict);
+        await CuitUnico.ValidarClienteAsync(_db, request.CUIT, id);
 
         if (await _db.Usuarios.IgnoreQueryFilters().AnyAsync(u => u.Email == request.Email && u.Id != id))
             throw new ApiException("Ya existe un usuario con ese email.", StatusCodes.Status409Conflict);
 
         cliente.Usuario.Nombre = request.Nombre;
         cliente.Usuario.Apellido = request.Apellido;
-        cliente.Usuario.CUIT = request.CUIT;
+        cliente.Usuario.CUIT = request.CUIT.Trim();
         cliente.Usuario.Email = request.Email;
         cliente.Telefono = request.Telefono;
         cliente.Direccion = request.Direccion;
 
-        await _db.SaveChangesAsync();
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
+        {
+            throw new ApiException("Ya existe una cuenta con esos datos únicos.", StatusCodes.Status409Conflict);
+        }
         return NoContent();
     }
 

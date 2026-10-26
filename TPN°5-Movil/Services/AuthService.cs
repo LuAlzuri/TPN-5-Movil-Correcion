@@ -89,6 +89,8 @@ public class AuthService(AppDbContext db, JwtSettings jwt)
         var email = request.Email.Trim().ToLowerInvariant();
         if (await db.Usuarios.IgnoreQueryFilters().AnyAsync(u => u.Email.ToUpper() == email.ToUpperInvariant(), cancellationToken))
             throw new ApiException("Ya existe una cuenta con ese email.", StatusCodes.Status409Conflict);
+        if (request.Rol == Usuario.RolCliente)
+            await CuitUnico.ValidarClienteAsync(db, request.CUIT, cancellationToken: cancellationToken);
         var usuario = new Usuario
         {
             Nombre = request.Nombre.Trim(), Apellido = request.Apellido.Trim(), CUIT = request.CUIT.Trim(),

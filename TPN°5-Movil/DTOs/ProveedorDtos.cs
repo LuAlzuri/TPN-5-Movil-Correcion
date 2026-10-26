@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace TPN_5_MOVIL.DTOs;
 
 public record ProveedorResponse(
@@ -10,7 +12,7 @@ public record ProveedorResponse(
 
 public record ProveedorRequest(
     string Nombre,
-    string CUIT,
+    [Required, MaxLength(20)] string CUIT,
     string? Email,
     string? Telefono,
     string? Direccion);
