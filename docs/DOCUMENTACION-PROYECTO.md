@@ -773,10 +773,12 @@ integrados. Los hashes de la columna Commit identifican el trabajo de cada rama.
 | Empleados | `codex/paso-9-2-empleados` | `2326368` | [#5](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/5) |
 | CUIT/CUIL único | `codex/cuil-unico-clientes-proveedores` | `04fcb22` | [#6](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/6) |
 
-La documentación unificada se prepara en `codex/documentacion-unificada`, basada
-en `origin/main` con el PR #6 integrado. El usuario autorizó el commit, la subida
-de esta entrega y la preparación del PR para su revisión. El merge queda a su
-cargo. Registrar aquí el commit y el PR reales cuando se confirme su creación.
+La documentación unificada se publicó en `codex/documentacion-unificada`, basada
+en `origin/main` con el PR #6 integrado. Commit inicial: `0d99f59`.
+[PR #7](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/7) abierto para
+revisión al registrar esta entrega. El usuario autorizó el commit y la subida;
+el merge queda a su cargo. La actualización de esta entrada se publica como
+seguimiento documental en el mismo PR.
 
 ## 17 Fuentes originales y decisiones que las reemplazan
 
