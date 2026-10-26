@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using TPN_5_MOVIL.Data;
 using TPN_5_MOVIL.DTOs;
 using TPN_5_MOVIL.Entities;
 using TPN_5_MOVIL.Exceptions;
+using TPN_5_MOVIL.Services;
 
 namespace TPN_5_MOVIL.Controllers;
 
@@ -68,20 +70,19 @@ public class ProveedoresController : ControllerBase
     [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
     public async Task<ActionResult<ProveedorResponse>> Create([FromBody] ProveedorRequest request)
     {
-        if (await _db.Proveedores.IgnoreQueryFilters().AnyAsync(p => p.CUIT == request.CUIT))
-            throw new ApiException("Ya existe un proveedor con ese CUIT.", StatusCodes.Status409Conflict);
+        await CuitUnico.ValidarProveedorAsync(_db, request.CUIT);
 
         var proveedor = new Proveedor
         {
             Nombre = request.Nombre,
-            CUIT = request.CUIT,
+            CUIT = request.CUIT.Trim(),
             Email = request.Email,
             Telefono = request.Telefono,
             Direccion = request.Direccion
         };
 
         _db.Proveedores.Add(proveedor);
-        await _db.SaveChangesAsync();
+        await GuardarAsync();
 
         return CreatedAtAction(nameof(GetById), new { id = proveedor.Id },
             new ProveedorResponse(proveedor.Id, proveedor.Nombre, proveedor.CUIT, proveedor.Email, proveedor.Telefono, proveedor.Direccion));
@@ -95,16 +96,15 @@ public class ProveedoresController : ControllerBase
         if (proveedor is null)
             return NotFound();
 
-        if (await _db.Proveedores.IgnoreQueryFilters().AnyAsync(p => p.CUIT == request.CUIT && p.Id != id))
-            throw new ApiException("Ya existe un proveedor con ese CUIT.", StatusCodes.Status409Conflict);
+        await CuitUnico.ValidarProveedorAsync(_db, request.CUIT, id);
 
         proveedor.Nombre = request.Nombre;
-        proveedor.CUIT = request.CUIT;
+        proveedor.CUIT = request.CUIT.Trim();
         proveedor.Email = request.Email;
         proveedor.Telefono = request.Telefono;
         proveedor.Direccion = request.Direccion;
 
-        await _db.SaveChangesAsync();
+        await GuardarAsync();
         return NoContent();
     }
 
@@ -119,5 +119,17 @@ public class ProveedoresController : ControllerBase
         proveedor.Eliminado = true;
         await _db.SaveChangesAsync();
         return NoContent();
+    }
+
+    private async Task GuardarAsync()
+    {
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
+        {
+            throw new ApiException("Ya existe un proveedor con ese CUIT/CUIL.", StatusCodes.Status409Conflict);
+        }
     }
 }

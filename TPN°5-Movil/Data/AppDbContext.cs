@@ -5,6 +5,7 @@ namespace TPN_5_MOVIL.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    private const string CuitNormalizadoSql = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE([CUIT], '-', ''), ' ', ''), CHAR(9), ''), CHAR(10), ''), CHAR(13), '')";
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<Empleado> Empleados => Set<Empleado>();
     public DbSet<Cliente> Clientes => Set<Cliente>();
@@ -30,6 +31,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.PasswordHash).HasMaxLength(500).IsRequired();
             e.Property(x => x.Rol).HasMaxLength(20).IsRequired();
             e.HasIndex(x => x.Email).IsUnique();
+            e.Property<string>("CUITNormalizado").HasMaxLength(20)
+                .HasComputedColumnSql(CuitNormalizadoSql, stored: true);
+            e.HasIndex("CUITNormalizado").IsUnique().HasFilter("[Rol] = 'Cliente'")
+                .HasDatabaseName("IX_Usuarios_CUITNormalizado_Cliente");
             e.HasQueryFilter(x => !x.Eliminado);
         });
         modelBuilder.Entity<Empleado>(e =>
@@ -64,6 +69,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Telefono).HasMaxLength(50);
             e.Property(x => x.Direccion).HasMaxLength(300);
             e.HasIndex(x => x.CUIT).IsUnique();
+            e.Property<string>("CUITNormalizado").HasMaxLength(20)
+                .HasComputedColumnSql(CuitNormalizadoSql, stored: true);
+            e.HasIndex("CUITNormalizado").IsUnique().HasFilter(null);
             e.HasQueryFilter(x => !x.Eliminado);
         });
         modelBuilder.Entity<Producto>(e =>

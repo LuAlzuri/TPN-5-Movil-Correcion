@@ -22,4 +22,8 @@ Check(model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()).All(f => f.Dele
 Check(db.Productos.ToQueryString().Contains("Eliminado"), "Filtro de productos traducido a SQL");
 Check(!db.Productos.IgnoreQueryFilters().ToQueryString().Contains("WHERE"), "Auditoria puede omitir filtros");
 Check(db.DetallesIngreso.ToQueryString().Contains("Eliminado"), "Detalles filtran encabezados eliminados");
-Check(db.Database.GetMigrations().Count() == 11, "11 migraciones descubiertas");
+Check(model.FindEntityType(typeof(Usuario))!.GetIndexes().Any(i => i.IsUnique
+    && i.Properties.Single().Name == "CUITNormalizado" && i.GetFilter() == "[Rol] = 'Cliente'"), "CUIT unico solo entre Clientes");
+Check(model.FindEntityType(typeof(Proveedor))!.GetIndexes().Any(i => i.IsUnique
+    && i.Properties.Single().Name == "CUITNormalizado"), "CUIT unico entre Proveedores sin guiones ni espacios");
+Check(db.Database.GetMigrations().Count() == 13, "13 migraciones descubiertas");
