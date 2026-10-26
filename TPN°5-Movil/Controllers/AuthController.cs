@@ -29,7 +29,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    [Authorize(Roles = Usuario.RolAdmin)]
+    [Authorize(Roles = Usuario.RolAdministrador)]
     public async Task<ActionResult<UsuarioDto>> Register([FromBody] RegisterRequest request)
     {
         return CreatedAtAction(nameof(Register), await _authService.RegisterAsync(request));
@@ -46,7 +46,7 @@ public class AuthController : ControllerBase
         return await _db.Usuarios
             .AsNoTracking()
             .Where(u => u.Id == id)
-            .Select(u => new UsuarioDto(u.Id, u.NombreCompleto, u.Email, u.Rol, u.Activo))
+            .Select(u => new UsuarioDto(u.Id, u.Nombre, u.Apellido, u.CUIT, u.Email, u.Rol, u.Eliminado))
             .FirstOrDefaultAsync() is var usuario && usuario is not null
             ? Ok(usuario)
             : NotFound();

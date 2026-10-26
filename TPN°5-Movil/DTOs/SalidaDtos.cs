@@ -1,19 +1,7 @@
 namespace TPN_5_MOVIL.DTOs;
 
-public record SalidaResponse(
-    int Id,
-    int ProductoId,
-    string ProductoNombre,
-    int ClienteId,
-    string ClienteNombre,
-    int Cantidad,
-    decimal PrecioUnitario,
-    decimal Total,
-    DateTime Fecha,
-    string? Observaciones);
-
-public record SalidaRequest(
-    int ProductoId,
-    int ClienteId,
-    int Cantidad,
-    string? Observaciones);
+public record DetalleSalidaResponse(int Id, int ProductoId, int Cantidad, decimal PrecioUnitario, decimal DescAplicado);
+public record SalidaResponse(int Id, int ClienteId, int? EmpleadoId, DateTime Fecha, string? Observaciones,
+    bool ConfirmarXCliente, bool ConfirmarXEmpleado, DateTime? FechaConfirmacionCliente,
+    DateTime? FechaConfirmacionEmpleado, List<DetalleSalidaResponse> Detalles);
+public record SalidaRequest(string? Observaciones);

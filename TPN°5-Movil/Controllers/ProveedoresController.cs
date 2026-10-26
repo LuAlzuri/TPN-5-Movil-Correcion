@@ -65,10 +65,10 @@ public class ProveedoresController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = Usuario.RolAdmin)]
+    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
     public async Task<ActionResult<ProveedorResponse>> Create([FromBody] ProveedorRequest request)
     {
-        if (await _db.Proveedores.AnyAsync(p => p.CUIT == request.CUIT))
+        if (await _db.Proveedores.IgnoreQueryFilters().AnyAsync(p => p.CUIT == request.CUIT))
             throw new ApiException("Ya existe un proveedor con ese CUIT.", StatusCodes.Status409Conflict);
 
         var proveedor = new Proveedor
@@ -88,14 +88,14 @@ public class ProveedoresController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = Usuario.RolAdmin)]
+    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
     public async Task<IActionResult> Update(int id, [FromBody] ProveedorRequest request)
     {
         var proveedor = await _db.Proveedores.FindAsync(id);
         if (proveedor is null)
             return NotFound();
 
-        if (await _db.Proveedores.AnyAsync(p => p.CUIT == request.CUIT && p.Id != id))
+        if (await _db.Proveedores.IgnoreQueryFilters().AnyAsync(p => p.CUIT == request.CUIT && p.Id != id))
             throw new ApiException("Ya existe un proveedor con ese CUIT.", StatusCodes.Status409Conflict);
 
         proveedor.Nombre = request.Nombre;
@@ -109,17 +109,14 @@ public class ProveedoresController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = Usuario.RolAdmin)]
+    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
     public async Task<IActionResult> Delete(int id)
     {
         var proveedor = await _db.Proveedores.FindAsync(id);
         if (proveedor is null)
             return NotFound();
 
-        if (await _db.Productos.AnyAsync(p => p.ProveedorId == id) || await _db.Ingresos.AnyAsync(i => i.ProveedorId == id))
-            throw new ApiException("No se puede eliminar: el proveedor tiene productos o ingresos asociados.", StatusCodes.Status409Conflict);
-
-        _db.Proveedores.Remove(proveedor);
+        proveedor.Eliminado = true;
         await _db.SaveChangesAsync();
         return NoContent();
     }

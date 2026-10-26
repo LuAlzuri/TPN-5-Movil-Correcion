@@ -1,7 +1,5 @@
 namespace TPN_5_MOVIL.DTOs;
 
-public record UsuarioDto(int Id, string NombreCompleto, string Email, string Rol, bool Activo);
-
-public record UsuarioCreateRequest(string NombreCompleto, string Email, string Password, string Rol);
-
-public record UsuarioUpdateRequest(string NombreCompleto, string Email, string Rol, bool Activo, string? Password);
+public record UsuarioDto(int Id, string Nombre, string Apellido, string CUIT, string Email, string Rol, bool Eliminado);
+public record UsuarioCreateRequest(string Nombre, string Apellido, string CUIT, string Email, string Password, string Rol);
+public record UsuarioUpdateRequest(string Nombre, string Apellido, string CUIT, string Email, string? Password);

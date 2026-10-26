@@ -11,7 +11,7 @@ namespace TPN_5_MOVIL.Controllers;
 
 [ApiController]
 [Route("api/usuarios")]
-[Authorize(Roles = Usuario.RolAdmin)]
+[Authorize(Roles = Usuario.RolAdministrador)]
 public class UsuariosController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -34,10 +34,10 @@ public class UsuariosController : ControllerBase
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(busqueda))
-            query = query.Where(u => u.NombreCompleto.Contains(busqueda) || u.Email.Contains(busqueda));
+            query = query.Where(u => (u.Nombre + " " + u.Apellido).Contains(busqueda) || u.Email.Contains(busqueda));
 
         var result = await PaginatedResult<UsuarioDto>.CreateAsync(
-            query.Select(u => new UsuarioDto(u.Id, u.NombreCompleto, u.Email, u.Rol, u.Activo)),
+            query.Select(u => new UsuarioDto(u.Id, u.Nombre, u.Apellido, u.CUIT, u.Email, u.Rol, u.Eliminado)),
             page,
             pageSize);
         return Ok(result);
@@ -49,32 +49,16 @@ public class UsuariosController : ControllerBase
         var usuario = await _db.Usuarios
             .AsNoTracking()
             .Where(u => u.Id == id)
-            .Select(u => new UsuarioDto(u.Id, u.NombreCompleto, u.Email, u.Rol, u.Activo))
+            .Select(u => new UsuarioDto(u.Id, u.Nombre, u.Apellido, u.CUIT, u.Email, u.Rol, u.Eliminado))
             .FirstOrDefaultAsync();
 
         return usuario is null ? NotFound() : Ok(usuario);
     }
 
     [HttpPost]
-    public async Task<ActionResult<UsuarioDto>> Create([FromBody] UsuarioCreateRequest request)
+    public ActionResult<UsuarioDto> Create([FromBody] UsuarioCreateRequest request)
     {
-        if (await _db.Usuarios.AnyAsync(u => u.Email == request.Email))
-            throw new ApiException("Ya existe un usuario con ese email.", StatusCodes.Status409Conflict);
-
-        var usuario = new Usuario
-        {
-            NombreCompleto = request.NombreCompleto,
-            Email = request.Email,
-            Rol = request.Rol == Usuario.RolAdmin ? Usuario.RolAdmin : Usuario.RolUsuario,
-            Activo = true
-        };
-        usuario.PasswordHash = _passwordHasher.HashPassword(usuario, request.Password);
-
-        _db.Usuarios.Add(usuario);
-        await _db.SaveChangesAsync();
-
-        return CreatedAtAction(nameof(GetById), new { id = usuario.Id },
-            new UsuarioDto(usuario.Id, usuario.NombreCompleto, usuario.Email, usuario.Rol, usuario.Activo));
+        throw new ApiException("La creación conjunta de cuentas y perfiles está pendiente de implementación.", StatusCodes.Status501NotImplemented);
     }
 
     [HttpPut("{id:int}")]
@@ -84,14 +68,13 @@ public class UsuariosController : ControllerBase
         if (usuario is null)
             return NotFound();
 
-        if (await _db.Usuarios.AnyAsync(u => u.Email == request.Email && u.Id != id))
+        if (await _db.Usuarios.IgnoreQueryFilters().AnyAsync(u => u.Email == request.Email && u.Id != id))
             throw new ApiException("Ya existe un usuario con ese email.", StatusCodes.Status409Conflict);
 
-        usuario.NombreCompleto = request.NombreCompleto;
+        usuario.Nombre = request.Nombre;
+        usuario.Apellido = request.Apellido;
+        usuario.CUIT = request.CUIT;
         usuario.Email = request.Email;
-        usuario.Rol = request.Rol == Usuario.RolAdmin ? Usuario.RolAdmin : Usuario.RolUsuario;
-        usuario.Activo = request.Activo;
-
         if (!string.IsNullOrWhiteSpace(request.Password))
             usuario.PasswordHash = _passwordHasher.HashPassword(usuario, request.Password);
 
@@ -106,7 +89,7 @@ public class UsuariosController : ControllerBase
         if (usuario is null)
             return NotFound();
 
-        _db.Usuarios.Remove(usuario);
+        usuario.Eliminado = true;
         await _db.SaveChangesAsync();
         return NoContent();
     }
