@@ -1,3 +1,4 @@
+using Microsoft.Data.SqlClient;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -21,14 +22,19 @@ public class CategoriasController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Roles = Usuario.RolAdministrador)]
     public async Task<ActionResult<PaginatedResult<CategoriaResponse>>> GetAll(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
         [FromQuery] string? busqueda = null)
     {
+        if (page < 1 || pageSize < 1 || pageSize > 100 || (long)(page - 1) * pageSize > int.MaxValue)
+            throw new ApiException("Página inválida: page debe ser positivo y pageSize debe estar entre 1 y 100.");
+
+        busqueda = busqueda?.Trim();
         var query = _db.Categorias
             .AsNoTracking()
-            .OrderBy(c => c.Nombre)
+            .OrderBy(c => c.Nombre).ThenBy(c => c.Id)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(busqueda))
@@ -42,17 +48,19 @@ public class CategoriasController : ControllerBase
     }
 
     [HttpGet("catalogo")]
-    public async Task<ActionResult<IEnumerable<CategoriaResponse>>> GetCatalogo()
+    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado + "," + Usuario.RolCliente)]
+    public async Task<ActionResult<IEnumerable<CategoriaCatalogoResponse>>> GetCatalogo()
     {
         var categorias = await _db.Categorias
             .AsNoTracking()
-            .OrderBy(c => c.Nombre)
-            .Select(c => new CategoriaResponse(c.Id, c.Nombre, c.Descripcion, c.FechaCreacion))
+            .OrderBy(c => c.Nombre).ThenBy(c => c.Id)
+            .Select(c => new CategoriaCatalogoResponse(c.Id, c.Nombre))
             .ToListAsync();
         return Ok(categorias);
     }
 
     [HttpGet("{id:int}")]
+    [Authorize(Roles = Usuario.RolAdministrador)]
     public async Task<ActionResult<CategoriaResponse>> GetById(int id)
     {
         var categoria = await _db.Categorias
@@ -68,18 +76,18 @@ public class CategoriasController : ControllerBase
     [Authorize(Roles = Usuario.RolAdministrador)]
     public async Task<ActionResult<CategoriaResponse>> Create([FromBody] CategoriaCreateRequest request)
     {
-        if (await _db.Categorias.IgnoreQueryFilters().AnyAsync(c => c.Nombre == request.Nombre))
+        if (await _db.Categorias.IgnoreQueryFilters().AnyAsync(c => c.Nombre == request.Nombre.Trim()))
             throw new ApiException("Ya existe una categoría con ese nombre.", StatusCodes.Status409Conflict);
 
         var categoria = new Categoria
         {
-            Nombre = request.Nombre,
-            Descripcion = request.Descripcion,
+            Nombre = request.Nombre.Trim(),
+            Descripcion = NormalizarDescripcion(request.Descripcion),
             FechaCreacion = DateTime.UtcNow
         };
 
         _db.Categorias.Add(categoria);
-        await _db.SaveChangesAsync();
+        await GuardarAsync();
 
         return CreatedAtAction(nameof(GetById), new { id = categoria.Id },
             new CategoriaResponse(categoria.Id, categoria.Nombre, categoria.Descripcion, categoria.FechaCreacion));
@@ -93,13 +101,13 @@ public class CategoriasController : ControllerBase
         if (categoria is null)
             return NotFound();
 
-        if (await _db.Categorias.IgnoreQueryFilters().AnyAsync(c => c.Nombre == request.Nombre && c.Id != id))
+        if (await _db.Categorias.IgnoreQueryFilters().AnyAsync(c => c.Nombre == request.Nombre.Trim() && c.Id != id))
             throw new ApiException("Ya existe una categoría con ese nombre.", StatusCodes.Status409Conflict);
 
-        categoria.Nombre = request.Nombre;
-        categoria.Descripcion = request.Descripcion;
+        categoria.Nombre = request.Nombre.Trim();
+        categoria.Descripcion = NormalizarDescripcion(request.Descripcion);
 
-        await _db.SaveChangesAsync();
+        await GuardarAsync();
         return NoContent();
     }
 
@@ -112,7 +120,22 @@ public class CategoriasController : ControllerBase
             return NotFound();
 
         categoria.Eliminado = true;
-        await _db.SaveChangesAsync();
+        await GuardarAsync();
         return NoContent();
+    }
+
+    private static string? NormalizarDescripcion(string? descripcion) =>
+        string.IsNullOrWhiteSpace(descripcion) ? null : descripcion.Trim();
+
+    private async Task GuardarAsync()
+    {
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
+        {
+            throw new ApiException("Ya existe una categoría con ese nombre.", StatusCodes.Status409Conflict);
+        }
     }
 }
