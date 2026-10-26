@@ -12,7 +12,7 @@ namespace TPN_5_MOVIL.Controllers;
 
 [ApiController]
 [Route("api/proveedores")]
-[Authorize]
+[Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
 public class ProveedoresController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -28,13 +28,19 @@ public class ProveedoresController : ControllerBase
         [FromQuery] int pageSize = 10,
         [FromQuery] string? busqueda = null)
     {
+        if (page < 1 || pageSize < 1 || pageSize > 100 || (long)(page - 1) * pageSize > int.MaxValue)
+            throw new ApiException("Página inválida: page debe ser positivo y pageSize debe estar entre 1 y 100.");
+
+        busqueda = busqueda?.Trim();
         var query = _db.Proveedores
             .AsNoTracking()
             .OrderBy(p => p.Nombre)
+            .ThenBy(p => p.Id)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(busqueda))
-            query = query.Where(p => p.Nombre.Contains(busqueda) || p.CUIT.Contains(busqueda) || p.Email!.Contains(busqueda));
+            query = query.Where(p => p.Nombre.Contains(busqueda) || p.CUIT.Contains(busqueda)
+                || (p.Email != null && p.Email.Contains(busqueda)));
 
         var result = await PaginatedResult<ProveedorResponse>.CreateAsync(
             query.Select(p => new ProveedorResponse(p.Id, p.Nombre, p.CUIT, p.Email, p.Telefono, p.Direccion)),
@@ -49,6 +55,7 @@ public class ProveedoresController : ControllerBase
         var proveedores = await _db.Proveedores
             .AsNoTracking()
             .OrderBy(p => p.Nombre)
+            .ThenBy(p => p.Id)
             .Select(p => new ProveedorResponse(p.Id, p.Nombre, p.CUIT, p.Email, p.Telefono, p.Direccion))
             .ToListAsync();
         return Ok(proveedores);
@@ -67,18 +74,17 @@ public class ProveedoresController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
     public async Task<ActionResult<ProveedorResponse>> Create([FromBody] ProveedorRequest request)
     {
         await CuitUnico.ValidarProveedorAsync(_db, request.CUIT);
 
         var proveedor = new Proveedor
         {
-            Nombre = request.Nombre,
+            Nombre = request.Nombre.Trim(),
             CUIT = request.CUIT.Trim(),
             Email = request.Email,
-            Telefono = request.Telefono,
-            Direccion = request.Direccion
+            Telefono = NormalizarOpcional(request.Telefono),
+            Direccion = NormalizarOpcional(request.Direccion)
         };
 
         _db.Proveedores.Add(proveedor);
@@ -89,7 +95,6 @@ public class ProveedoresController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
     public async Task<IActionResult> Update(int id, [FromBody] ProveedorRequest request)
     {
         var proveedor = await _db.Proveedores.FindAsync(id);
@@ -98,18 +103,17 @@ public class ProveedoresController : ControllerBase
 
         await CuitUnico.ValidarProveedorAsync(_db, request.CUIT, id);
 
-        proveedor.Nombre = request.Nombre;
+        proveedor.Nombre = request.Nombre.Trim();
         proveedor.CUIT = request.CUIT.Trim();
         proveedor.Email = request.Email;
-        proveedor.Telefono = request.Telefono;
-        proveedor.Direccion = request.Direccion;
+        proveedor.Telefono = NormalizarOpcional(request.Telefono);
+        proveedor.Direccion = NormalizarOpcional(request.Direccion);
 
         await GuardarAsync();
         return NoContent();
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
     public async Task<IActionResult> Delete(int id)
     {
         var proveedor = await _db.Proveedores.FindAsync(id);
@@ -120,6 +124,9 @@ public class ProveedoresController : ControllerBase
         await _db.SaveChangesAsync();
         return NoContent();
     }
+
+    private static string? NormalizarOpcional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private async Task GuardarAsync()
     {
