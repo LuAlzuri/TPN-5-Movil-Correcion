@@ -21,7 +21,7 @@ API: `TPN°5-Movil`, ASP.NET Core con .NET 9, EF Core 9 y SQL Server.
 8. [Categorías implementadas](#8-categorías-implementadas)
 9. [Empleados implementados](#9-empleados-implementados)
 10. [Unicidad de CUIT y CUIL implementada](#10-unicidad-de-cuit-y-cuil-implementada)
-11. [Clientes implementados y contratos pendientes](#11-clientes-implementados-y-contratos-pendientes)
+11. [CRUD implementados y contratos pendientes](#11-crud-implementados-y-contratos-pendientes)
 12. [Entorno y configuración](#12-entorno-y-configuración)
 13. [Migraciones y datos existentes](#13-migraciones-y-datos-existentes)
 14. [Pruebas y límites de la validación](#14-pruebas-y-límites-de-la-validación)
@@ -32,20 +32,20 @@ API: `TPN°5-Movil`, ASP.NET Core con .NET 9, EF Core 9 y SQL Server.
 
 ## 1 Estado actual y próximo bloque
 
-La API compila sin advertencias y la última suite aprobó 99 pruebas en SQLite
+La API compila sin advertencias y la última suite aprobó 119 pruebas en SQLite
 aislada, con 0 fallidas y 0 omitidas. El registro transaccional, la autenticación y los CRUD de
-categorías, empleados y clientes están implementados. El paso 9.3 de clientes
-está publicado en el PR #8, abierto para revisión y pendiente de integración por
-el usuario. Los resultados de validación figuran en la sección 14.
+categorías, empleados, clientes y proveedores están implementados. El paso 9.4 de
+proveedores está publicado en el PR #9, abierto para revisión y pendiente de
+integración por el usuario. Los resultados figuran en la sección 14.
 La unicidad de CUIT/CUIL entre clientes y entre proveedores tiene migraciones propias.
 
-Los PR del 1 al 7 están integrados en `main`, según las comprobaciones realizadas
-al iniciar el paso 9.3. El último es el PR #7, integrado mediante
-`c370294`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
+Los PR del 1 al 8 están integrados en `main`, según las comprobaciones realizadas
+al iniciar el paso 9.4. El último es el PR #8, integrado mediante
+`5fdbbc4`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
 automáticamente por estar escrito aquí.
 
 La API todavía no está terminada funcionalmente. El próximo bloque es el **paso
-9.4, revisión integral del CRUD de proveedores**, pendiente de revisión de alcance
+9.5, revisión integral de productos e imágenes**, pendiente de revisión de alcance
 y autorización. El flujo de inventario continúa pendiente de sus propios bloques.
 
 | Área | Estado vigente |
@@ -56,8 +56,8 @@ y autorización. El flujo de inventario continúa pendiente de sus propios bloqu
 | Categorías y catálogo de categorías | Paso 9.1 implementado |
 | Empleados | Paso 9.2 implementado |
 | CUIT/CUIL único en clientes y proveedores | Implementado; dos migraciones nuevas |
-| CRUD completo de clientes | Paso 9.3 publicado en PR #8; pendiente de integración |
-| CRUD completo de proveedores | Revisión integral pendiente; unicidad ya reforzada |
+| CRUD completo de clientes | Paso 9.3 integrado en PR #8 |
+| CRUD completo de proveedores | Paso 9.4 publicado en PR #9; pendiente de integración |
 | Productos e imágenes | CRUD base adaptado; revisión e imágenes pendientes |
 | Ingresos y stock | Flujo funcional pendiente |
 | Salidas, carrito y stock | Flujo funcional pendiente |
@@ -438,11 +438,11 @@ Hay dos migraciones reales, una por entidad modificada, detalladas en la secció
 El ajuste de unicidad fue independiente del CRUD completo de clientes, que se
 implementó después en el paso 9.3.
 
-## 11 Clientes implementados y contratos pendientes
+## 11 CRUD implementados y contratos pendientes
 
-Clientes está implementado en el paso 9.3. Los restantes apartados describen código
-de transición, no una validación integral de los CRUD pendientes. Los límites
-estrictos de paginado de categorías, empleados y clientes no
+Clientes está implementado en el paso 9.3 y proveedores en el 9.4. Los apartados
+pendientes describen código de transición, no una validación integral de esos CRUD.
+Los límites estrictos de paginado de categorías, empleados, clientes y proveedores no
 deben darse por implementados en todas las rutas: el helper general todavía
 normaliza page a un mínimo de 1 y pageSize al intervalo 1 a 100.
 
@@ -508,16 +508,54 @@ CUIT y Eliminado. La edición no cambia Rol, no restaura cuentas ni borra perfil
 puede cambiar Password, sujeta a la política del paso 8. Email y otras validaciones
 de esa ruta requieren revisión; no asumir toda la normalización del registro.
 
-### 11.3 Proveedores
+### 11.3 Proveedores implementados
 
-Hay GET paginado, catálogo y GET por ID para cualquier cuenta autenticada en el
-código actual. POST, PUT y DELETE requieren Administrador o Empleado. El diseño
-acordado limita el CRUD a esos dos roles: revisar las lecturas en su bloque, sin
-convertir el permiso temporal en una decisión funcional definitiva.
+Todas las rutas requieren Administrador o Empleado, incluido el catálogo.
+Cliente recibe 403 y los anónimos 401. Se reemplaza el permiso temporal de lectura
+para cualquier cuenta autenticada por los permisos acordados para este bloque.
 
-La respuesta contiene Id, Nombre, CUIT, Email, Telefono y Direccion. Crear y editar
-ya controlan CUIT equivalente incluso entre eliminados. El CRUD completo requiere
-revisar las demás validaciones, paginado y alcance de consultas.
+| Método | Ruta | Comportamiento |
+| --- | --- | --- |
+| GET | `/api/proveedores` | Proveedores activos con búsqueda y paginado |
+| GET | `/api/proveedores/catalogo` | Catálogo operativo completo de proveedores activos |
+| GET | `/api/proveedores/{id}` | Consulta individual |
+| POST | `/api/proveedores` | Crear; 201 y Location de la consulta individual |
+| PUT | `/api/proveedores/{id}` | Edición completa; 204 |
+| DELETE | `/api/proveedores/{id}` | Marca Proveedor.Eliminado; 204 |
+
+ProveedorResponse conserva Id, Nombre, CUIT, Email, Telefono y Direccion, también
+en catálogo. ProveedorRequest se usa para crear y editar: Nombre obligatorio con
+máximo 150, CUIT obligatorio con máximo 20, Email opcional válido hasta 150,
+Telefono opcional hasta 50 y Direccion opcional hasta 300. Rechaza propiedades
+JSON desconocidas como Id o Eliminado; no permite restaurar por edición.
+
+Nombre y CUIT se guardan sin espacios exteriores. El email se recorta, convierte
+a minúsculas y, si queda vacío, a null antes de validarlo como opcional. Teléfono
+y dirección también se recortan; vacíos o solo espacios se guardan como null.
+Omitir opcionales en PUT los deja en null. El email de proveedores no es único:
+la regla de email único corresponde a cuentas de Usuario.
+
+Se reutiliza CuitUnico y los índices existentes para impedir CUIT/CUIL equivalentes
+entre proveedores activos o eliminados. El propio ID se excluye al editar y los
+conflictos se devuelven como 409, incluyendo colisiones de índices SQL Server.
+La comparación de equivalencia conserva las reglas de la sección 10; no se
+introduce validación de dígito verificador ni longitud exacta de 11 dígitos.
+
+Listado y catálogo ordenan por Nombre e Id. El listado acepta page positivo y
+pageSize de 1 a 100 (1 y 10 por defecto); parámetros inválidos o desplazamientos
+fuera de Int32 devuelven 400. Una página fuera del resultado devuelve Items vacío.
+La búsqueda recortada consulta Nombre, CUIT y Email por coincidencia parcial,
+admite proveedores sin email y no normaliza guiones al buscar.
+
+Eliminar conserva ingresos, sus detalles y stock, incluso cuando el proveedor tiene
+ingresos confirmados. El proveedor desaparece de listado, catálogo y consulta por
+ID; su edición o eliminación posterior devuelve 404. El catálogo y las consultas
+operativas ya no lo ofrecen para nuevas selecciones. La validación de proveedor
+activo al guardar un ingreso corresponde al paso 10: la creación de ingresos
+continúa temporalmente en 501 y no se implementa en este bloque.
+
+No se agregan endpoints de auditoría ni se cambia el modelo o el esquema. Los
+históricos completos siguen pendientes de sus propias consultas autorizadas.
 
 ### 11.4 Productos e imágenes
 
@@ -644,7 +682,7 @@ Actualmente hay 13 migraciones: las once iniciales y estas dos del ajuste de CUI
 | `20261026210457_CuilUnicoClientes` | CUITNormalizado calculado en Usuarios e índice único filtrado por rol Cliente |
 | `20261026210619_CuilUnicoProveedores` | CUITNormalizado calculado en Proveedores e índice único sin filtro |
 
-No hubo cambios de esquema en los pasos 7, 8, 9.1, 9.2 ni 9.3; no se crearon migraciones
+No hubo cambios de esquema en los pasos 7, 8, 9.1, 9.2, 9.3 ni 9.4; no se crearon migraciones
 vacías. El snapshot vigente está en `TPN°5-Movil/Migrations`, para que lo descubra
 tanto la API como el proyecto auxiliar.
 
@@ -751,6 +789,7 @@ que ya no sirven para rutas autenticadas. No sustituye la suite actual.
 | Paso 9.2 | 54 pruebas, 0 fallidas y 0 omitidas; compilación sin advertencias | Funcionales en SQLite; sin aplicación a bases personales |
 | Unicidad de CUIL | 72 pruebas, 0 fallidas y 0 omitidas; verificación de 13 migraciones | Funcionales en SQLite; SQL generado/revisado, sin ejecutar las dos migraciones nuevas en SQL Server real |
 | Paso 9.3 | 99 pruebas, 0 fallidas y 0 omitidas; compilación sin advertencias | Funcionales en SQLite; sin pruebas funcionales en SQL Server ni migraciones nuevas |
+| Paso 9.4 | 119 pruebas, 0 fallidas y 0 omitidas; compilación sin advertencias | Funcionales en SQLite; sin pruebas funcionales en SQL Server ni migraciones nuevas |
 
 Los números son totales de la suite en cada entrega, no cantidades acumulables.
 Durante el paso 8 se aplicaron las once migraciones iniciales a bases nuevas de
@@ -758,7 +797,7 @@ prueba y se probó el CLI del primer Administrador, incluido el rechazo de la
 segunda creación. La instancia descartable se detuvo al terminar.
 
 La suite actual cubre autenticación, perfiles, permisos, revocación, CORS,
-categorías, empleados, clientes, rollback en creación/edición, paginado, conservación de
+categorías, empleados, clientes, proveedores, rollback en creación/edición, paginado, conservación de
 históricos y CUIT/CUIL único, incluyendo formatos equivalentes, eliminados,
 rutas alternativas y rechazo directo por índices. Confirma que el modelo SQL
 Server coincide con el snapshot sin abrir una conexión.
@@ -778,6 +817,15 @@ propiedades inesperadas, duplicados activos/eliminados, búsqueda, orden estable
 paginado, perfiles inconsistentes, cuentas de otro rol, preservación de salidas,
 revocación y rollback de creación/edición. Las 72 pruebas previas también pasaron.
 
+El paso 9.4 incorpora 20 casos de proveedores y vuelve a aprobar los 99 previos.
+Verifica CRUD completo para Administrador y Empleado; bloqueo de anónimos y
+Cliente en todas las rutas; límites y datos inválidos; opcionales vacíos, omitidos
+y en longitudes máximas; rechazo de campos desconocidos; búsqueda con email null;
+orden estable y paginado; duplicados activos y eliminados; y preservación de
+ingresos confirmados, detalles y stock tras soft delete. No se aplicaron migraciones
+ni se modificaron bases personales. La comparación del modelo SQL Server con el
+snapshot sigue incluida en la suite, sin abrir conexión.
+
 ## 15 Plan de trabajo y alcance por autorizar
 
 El plan original se mantiene con los siguientes estados:
@@ -795,9 +843,9 @@ El plan original se mantiene con los siguientes estados:
 | 9.1 | CRUD de categorías | Implementado |
 | 9.2 | CRUD de empleados | Implementado |
 | Ajuste adicional | CUIT/CUIL único en clientes y proveedores | Implementado |
-| 9.3 | CRUD de clientes | Implementado y publicado en PR #8; pendiente de integración |
-| 9.4 | CRUD de proveedores | Próximo bloque, excepto unicidad ya entregada; alcance por autorizar |
-| 9.5 | CRUD de productos e imágenes | Pendiente de revisión integral y carga de imágenes |
+| 9.3 | CRUD de clientes | Implementado e integrado en PR #8 |
+| 9.4 | CRUD de proveedores | Implementado y publicado en PR #9; pendiente de integración |
+| 9.5 | CRUD de productos e imágenes | Próximo bloque; alcance por autorizar |
 | 10 | Flujo completo de ingresos y stock | Pendiente |
 | 11 | Flujo completo de salidas y stock | Pendiente |
 | 12 | Validación integral y entrega | Pendiente |
@@ -812,16 +860,24 @@ de usuarios en este bloque. Posteriormente autorizó el commit y la subida de es
 entrega a una rama para revisarla mediante PR. El merge queda a cargo del usuario;
 no se autoriza aplicar migraciones.
 
-Para el paso 9.4 revisar ProveedoresController y sus DTOs: permisos definitivos de
-lectura y escritura, datos de catálogo, validación integral, búsqueda, paginado,
-soft delete y pruebas. Reutilizar CuitUnico sin duplicar migraciones. Presentar el
-alcance concreto antes de editar y resolver qué consultas necesitan otros roles,
-sin ampliar permisos por suposición. No implementar productos ni stock en ese bloque.
+El usuario autorizó el paso 9.4 con acceso exclusivo de Administrador y Empleado
+en todas las rutas, validación de datos, búsqueda, paginado estable, soft delete,
+pruebas y actualización de este documento. Se modifican ProveedoresController y
+ProveedorDtos y se agrega ProveedorTests. Se reutilizan CuitUnico e índices sin
+modificar entidades ni generar migraciones. La autorización cubre implementación
+local y pruebas. Posteriormente el usuario autorizó el commit y la subida de esta
+entrega a una rama para revisarla mediante PR. El merge queda a su cargo.
+
+Para el paso 9.5 revisar ProductosController, sus DTOs y el flujo de imágenes:
+validación, permisos, paginado, asociaciones activas, archivo en wwwroot/uploads,
+metadatos y unicidad de imagen por producto. Presentar el alcance antes de editar,
+definiendo las lecturas de catálogo que necesite Cliente, sin modificar stock
+desde el CRUD común ni avanzar al flujo de ingresos/salidas en ese bloque.
 
 ## 16 Historial de entregas
 
-Estado verificado al preparar esta versión: PR #1 al #7 integrados; PR #8 abierto
-para revisión. Los hashes de la columna Commit identifican el trabajo de cada rama.
+Estado verificado al preparar esta versión: PR #1 al #8 integrados; PR #9 abierto.
+Los hashes de la columna Commit identifican el trabajo de cada rama.
 
 | Entrega | Rama | Commit | PR |
 | --- | --- | --- | --- |
@@ -832,11 +888,12 @@ para revisión. Los hashes de la columna Commit identifican el trabajo de cada r
 | Empleados | `codex/paso-9-2-empleados` | `2326368` | [#5](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/5) |
 | CUIT/CUIL único | `codex/cuil-unico-clientes-proveedores` | `04fcb22` | [#6](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/6) |
 | Documentación unificada | `codex/documentacion-unificada` | `0d99f59` y `29fe5f6` | [#7](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/7) |
-| Clientes | `codex/paso-9-3-clientes` | `e1a12b7` inicial | [#8 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/8) |
+| Clientes | `codex/paso-9-3-clientes` | `e1a12b7` y `535e869` | [#8](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/8) |
+| Proveedores | `codex/paso-9-4-proveedores` | `ad4267a` inicial | [#9 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/9) |
 
-El PR #7 ya está integrado, comprobado al iniciar el paso 9.3. Este último se
-publicó en `codex/paso-9-3-clientes`, basada en `origin/main` con el merge
-`c370294`, mediante el commit inicial `e1a12b7`. El PR #8 queda abierto para
+El PR #8 ya está integrado mediante `5fdbbc4`, comprobado al iniciar el paso 9.4.
+El paso 9.4 se publicó en `codex/paso-9-4-proveedores`, basada en `origin/main`
+con ese merge, mediante el commit inicial `ad4267a`. El PR #9 queda abierto para
 revisión; el merge sigue a cargo del usuario. Esta actualización del historial
 se publica como seguimiento documental en el mismo PR.
 
