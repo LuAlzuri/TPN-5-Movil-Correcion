@@ -72,10 +72,7 @@ public class EmpleadosController(AppDbContext db, AuthService auth) : Controller
         var email = Normalizacion.Email(request.Email);
         await db.ExigirEmailLibreAsync(email, "Ya existe una cuenta con ese email.", id);
 
-        empleado.Usuario.Nombre = request.Nombre.Trim();
-        empleado.Usuario.Apellido = request.Apellido.Trim();
-        empleado.Usuario.CUIT = request.CUIT.Trim();
-        empleado.Usuario.Email = email;
+        AuthService.AsignarDatos(empleado.Usuario, request.Nombre, request.Apellido, request.CUIT, email);
         empleado.FechaIngreso = request.FechaIngreso!.Value;
         await db.GuardarOConflictoAsync("Ya existe una cuenta con esos datos únicos.");
         return NoContent();

@@ -89,10 +89,7 @@ public class UsuariosController : ControllerBase
         if (usuario.Rol == Usuario.RolCliente)
             await CuitUnico.ValidarClienteAsync(_db, request.CUIT, id);
 
-        usuario.Nombre = request.Nombre.Trim();
-        usuario.Apellido = request.Apellido.Trim();
-        usuario.CUIT = request.CUIT.Trim();
-        usuario.Email = email;
+        AuthService.AsignarDatos(usuario, request.Nombre, request.Apellido, request.CUIT, email);
         if (request.Password is not null)
         {
             AuthService.ValidarPassword(request.Password);

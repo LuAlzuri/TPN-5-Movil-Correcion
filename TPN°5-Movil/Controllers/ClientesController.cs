@@ -90,10 +90,7 @@ public class ClientesController(AppDbContext db, AuthService auth) : ControllerB
         var email = Normalizacion.Email(request.Email);
         await db.ExigirEmailLibreAsync(email, "Ya existe un usuario con ese email.", id);
 
-        cliente.Usuario.Nombre = request.Nombre.Trim();
-        cliente.Usuario.Apellido = request.Apellido.Trim();
-        cliente.Usuario.CUIT = request.CUIT.Trim();
-        cliente.Usuario.Email = email;
+        AuthService.AsignarDatos(cliente.Usuario, request.Nombre, request.Apellido, request.CUIT, email);
         cliente.Telefono = Normalizacion.Opcional(request.Telefono);
         cliente.Direccion = Normalizacion.Opcional(request.Direccion);
 
