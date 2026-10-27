@@ -370,6 +370,106 @@ public sealed class CriticalScenarios(SqlServerFixture sql)
         await app.DatabaseAsync(async db => Assert.Equal(1, await db.Imagenes.CountAsync(i => i.ProductoId == inventory.ProductId)));
     }
 
+    [Fact]
+    public async Task Importes_redondean_por_detalle_y_conservan_precio_historico_en_auditoria()
+    {
+        await using var app = await sql.CreateApplicationAsync();
+        await app.LoginAdminAsync();
+        var inventory = await InventoryAsync(app);
+        async Task Price(decimal price) => await app.StatusAsync(HttpMethod.Put,
+            $"/api/productos/{inventory.ProductId}", HttpStatusCode.NoContent, app.Admin,
+            new { nombre = "Producto", precio = price, categoriaId = inventory.CategoryId });
+        await Price(0.01m);
+        var income = await IncomeAsync(app, inventory, []);
+        foreach (var discount in new[] { 50m, 50m, 0m, 100m })
+            await app.StatusAsync(HttpMethod.Post, $"/api/ingresos/{income.Id}/detalles", HttpStatusCode.Created,
+                inventory.Employee, new { productoId = inventory.ProductId, cantidad = 1, descAplicado = discount });
+        income = await app.JsonAsync<IngresoResponse>(HttpMethod.Post, $"/api/ingresos/{income.Id}/confirmar", inventory.Employee);
+        Assert.Equal(new[] { 0.01m, 0.01m, 0.01m, 0m }, income.Detalles.Select(d => d.Subtotal));
+        Assert.Equal(0.03m, income.Total); // Rounding the aggregate would produce 0.02.
+        await Price(0.03m);
+        var cart = await CartAsync(app, inventory.Client, [(inventory.ProductId, 1)]);
+        await Price(0.99m);
+        var detail = Assert.Single(cart.Detalles);
+        await app.StatusAsync(HttpMethod.Put, $"/api/salidas/{cart.Id}/detalles/{detail.Id}", HttpStatusCode.OK,
+            inventory.Client, new { cantidad = 2 });
+        await app.StatusAsync(HttpMethod.Post, $"/api/salidas/{cart.Id}/confirmar-cliente", HttpStatusCode.OK, inventory.Client);
+        cart = await app.JsonAsync<SalidaResponse>(HttpMethod.Post, $"/api/salidas/{cart.Id}/confirmar", inventory.Employee);
+        Assert.Equal(0.03m, Assert.Single(cart.Detalles).PrecioUnitario);
+        Assert.Equal(0.06m, cart.Total);
+        var historicalIncome = await app.JsonAsync<IngresoResponse>(HttpMethod.Get, $"/api/ingresos/{income.Id}", inventory.Employee);
+        Assert.Equal(0.03m, historicalIncome.Total);
+        Assert.All(historicalIncome.Detalles, d => Assert.Equal(0.01m, d.PrecioUnitario));
+        var auditIncome = await app.JsonAsync<AuditoriaIngresoResponse>(HttpMethod.Get, $"/api/auditoria/ingresos/{income.Id}", app.Admin);
+        Assert.Equal(income.Total, auditIncome.Total);
+        Assert.Equal(income.Detalles.Select(d => d.Subtotal), auditIncome.Detalles.Select(d => d.Subtotal));
+        var auditSale = await app.JsonAsync<AuditoriaSalidaResponse>(HttpMethod.Get, $"/api/auditoria/salidas/{cart.Id}", app.Admin);
+        Assert.Equal(cart.Total, auditSale.Total);
+        Assert.Equal(0.03m, Assert.Single(auditSale.Detalles).PrecioUnitario);
+        var path = $"/api/auditoria/productos/{inventory.ProductId}/movimientos";
+        var sales = await app.JsonAsync<PaginatedResult<AuditoriaMovimientoResponse>>(HttpMethod.Get, path + "?tipo=Salida&pageSize=1", app.Admin);
+        Assert.Equal(1, sales.TotalCount);
+        Assert.Equal(0.06m, Assert.Single(sales.Items).Subtotal);
+        var first = await app.JsonAsync<PaginatedResult<AuditoriaMovimientoResponse>>(HttpMethod.Get, path + "?tipo=Ingreso&pageSize=1", app.Admin);
+        var second = await app.JsonAsync<PaginatedResult<AuditoriaMovimientoResponse>>(HttpMethod.Get, path + "?tipo=Ingreso&pageSize=1&page=2", app.Admin);
+        Assert.Equal(4, first.TotalCount);
+        Assert.Equal(4, second.TotalCount);
+        Assert.NotEqual(Assert.Single(first.Items).DetalleId, Assert.Single(second.Items).DetalleId);
+        foreach (var row in first.Items.Concat(second.Items))
+            Assert.Equal(income.Detalles.Single(d => d.Id == row.DetalleId).Subtotal, row.Subtotal);
+    }
+
+    [Fact]
+    public async Task Limites_monetarios_rechazan_excesos_sin_persistir_detalles_parciales()
+    {
+        const decimal max = 9999999999999999.99m;
+        await using var app = await sql.CreateApplicationAsync();
+        await app.LoginAdminAsync();
+        var inventory = await InventoryAsync(app);
+        await app.StatusAsync(HttpMethod.Put, $"/api/productos/{inventory.ProductId}", HttpStatusCode.NoContent, app.Admin,
+            new { nombre = "Producto", precio = max, categoriaId = inventory.CategoryId });
+        var seed = await IncomeAsync(app, inventory, [(inventory.ProductId, 1)], confirm: true);
+        Assert.Equal(max, seed.Total);
+        var cheap = await ProductAsync(app, inventory.CategoryId, "Otro producto");
+        await app.StatusAsync(HttpMethod.Put, $"/api/productos/{cheap}", HttpStatusCode.NoContent, app.Admin,
+            new { nombre = "Otro producto", precio = 0.01m, categoriaId = inventory.CategoryId });
+        await IncomeAsync(app, inventory, [(cheap, 1)], confirm: true);
+        var income = await IncomeAsync(app, inventory, [(inventory.ProductId, 1)]);
+        var cart = await CartAsync(app, inventory.Client, [(inventory.ProductId, 1)]);
+        foreach (var (path, actor, message) in new[]
+        {
+            ($"/api/ingresos/{income.Id}/detalles", inventory.Employee, "El total del ingreso excede el rango decimal(18,2)."),
+            ($"/api/salidas/{cart.Id}/detalles", inventory.Client, "El total de la salida excede el rango decimal(18,2).")
+        })
+        {
+            using var rejected = await app.SendAsync(HttpMethod.Post, path, actor, new { productoId = cheap, cantidad = 1 });
+            Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+            var error = await rejected.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(message, error.GetProperty("error").GetString());
+        }
+        foreach (var discount in new[] { -0.01m, 100.01m, 0.001m })
+            await app.StatusAsync(HttpMethod.Post, $"/api/ingresos/{income.Id}/detalles", HttpStatusCode.BadRequest,
+                inventory.Employee, new { productoId = cheap, cantidad = 1, descAplicado = discount });
+        foreach (var price in new[] { -0.01m, 10000000000000000m, 0.001m })
+            await app.StatusAsync(HttpMethod.Put, $"/api/productos/{cheap}", HttpStatusCode.BadRequest, app.Admin,
+                new { nombre = "Otro producto", precio = price, categoriaId = inventory.CategoryId });
+        await app.StatusAsync(HttpMethod.Post, $"/api/ingresos/{income.Id}/detalles", HttpStatusCode.BadRequest,
+            inventory.Employee, new { productoId = inventory.ProductId, cantidad = 2 });
+        var preservedIncome = await app.JsonAsync<IngresoResponse>(HttpMethod.Get, $"/api/ingresos/{income.Id}", inventory.Employee);
+        var preservedCart = await app.JsonAsync<SalidaResponse>(HttpMethod.Get, $"/api/salidas/{cart.Id}", inventory.Client);
+        Assert.Equal(max, preservedIncome.Total);
+        Assert.Single(preservedIncome.Detalles);
+        Assert.Equal(max, preservedCart.Total);
+        Assert.Single(preservedCart.Detalles);
+        var free = await IncomeAsync(app, inventory, [(inventory.ProductId, int.MaxValue)], discount: 100m);
+        Assert.Equal(0m, free.Total);
+        Assert.Equal(int.MaxValue, Assert.Single(free.Detalles).Cantidad);
+        await app.StatusAsync(HttpMethod.Post, $"/api/salidas/{cart.Id}/detalles", HttpStatusCode.Conflict,
+            inventory.Client, new { productoId = inventory.ProductId, cantidad = int.MaxValue });
+        Assert.Equal(1, await StockAsync(app, inventory.ProductId));
+        Assert.Equal(1, await StockAsync(app, cheap));
+    }
+
     private sealed record Inventory(TestAccount Employee, TestAccount Client, int CategoryId,
         int SupplierId, int ProductId, int? SeedIncomeId);
 

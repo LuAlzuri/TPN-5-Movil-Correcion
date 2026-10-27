@@ -121,7 +121,7 @@ public sealed class AuditoriaService(AppDbContext db)
         var header = await UnoAsync(Ingresos(Historico<Ingreso>().Where(i => i.Id == id)), ct);
         var details = await Historico<DetalleIngreso>().Where(d => d.IngresoId == id).OrderBy(d => d.Id).Select(d =>
             new AuditoriaDetalleResponse(d.Id, new AuditoriaReferenciaResponse(d.ProductoId, d.Producto.Nombre, d.Producto.Eliminado),
-                d.Cantidad, d.PrecioUnitario, d.DescAplicado, Importe(d.Cantidad, d.PrecioUnitario, d.DescAplicado))).ToListAsync(ct);
+                d.Cantidad, d.PrecioUnitario, d.DescAplicado, ImportesMovimiento.Subtotal(d.Cantidad, d.PrecioUnitario, d.DescAplicado))).ToListAsync(ct);
         return new(header, details, details.Sum(d => d.Subtotal));
     }
 
@@ -148,7 +148,7 @@ public sealed class AuditoriaService(AppDbContext db)
         var header = await UnoAsync(Salidas(Historico<Salida>().Where(s => s.Id == id)), ct);
         var details = await Historico<DetalleSalida>().Where(d => d.SalidaId == id).OrderBy(d => d.Id).Select(d =>
             new AuditoriaDetalleResponse(d.Id, new AuditoriaReferenciaResponse(d.ProductoId, d.Producto.Nombre, d.Producto.Eliminado),
-                d.Cantidad, d.PrecioUnitario, d.DescAplicado, Importe(d.Cantidad, d.PrecioUnitario, d.DescAplicado))).ToListAsync(ct);
+                d.Cantidad, d.PrecioUnitario, d.DescAplicado, ImportesMovimiento.Subtotal(d.Cantidad, d.PrecioUnitario, d.DescAplicado))).ToListAsync(ct);
         return new(header, details, details.Sum(d => d.Subtotal));
     }
 
@@ -188,7 +188,7 @@ public sealed class AuditoriaService(AppDbContext db)
             Items = page.Items.Select(m => new AuditoriaMovimientoResponse(m.EncabezadoId, m.DetalleId, m.ProductoId, m.Tipo,
                 m.Fecha, m.FechaConfirmacion, m.Eliminado, Estado(m), m.Cantidad,
                 m.Confirmado && !m.Eliminado ? m.Cantidad : 0, m.PrecioUnitario, m.Descuento,
-                Importe(Math.Abs(m.Cantidad), m.PrecioUnitario, m.Descuento),
+                ImportesMovimiento.Subtotal(Math.Abs(m.Cantidad), m.PrecioUnitario, m.Descuento),
                 new AuditoriaReferenciaResponse(m.ContraparteId, m.ContraparteNombre, m.ContraparteEliminado))).ToList()
         };
     }
@@ -196,8 +196,6 @@ public sealed class AuditoriaService(AppDbContext db)
     private static string Estado(MovimientoFila m) => m.Tipo == "Ingreso"
         ? m.Eliminado ? m.Confirmado ? "Revertido" : "BorradorEliminado" : m.Confirmado ? "Confirmado" : "Borrador"
         : m.Eliminado ? "Eliminada" : m.Confirmado ? "Confirmada" : m.Solicitado ? "Solicitada" : "Borrador";
-    private static decimal Importe(int cantidad, decimal precio, decimal descuento) =>
-        decimal.Round(cantidad * precio * (1 - descuento / 100m), 2, MidpointRounding.AwayFromZero);
     private static ApiException NoEncontrado() => new("El registro no existe.", StatusCodes.Status404NotFound);
     private static async Task<T> UnoAsync<T>(IQueryable<T> query, CancellationToken ct) where T : class =>
         await query.SingleOrDefaultAsync(ct) ?? throw NoEncontrado();

@@ -10,8 +10,6 @@ namespace TPN_5_MOVIL.Services;
 
 public sealed class SalidaService(AppDbContext db)
 {
-    private const decimal MaxImporte = 9999999999999999.99m;
-
     public async Task<PaginatedResult<SalidaResponse>> ListarAsync(int? propietarioId, int page, int pageSize,
         int? productoId, int? clienteId, DateTime? desde, DateTime? hasta, CancellationToken ct)
     {
@@ -255,25 +253,13 @@ public sealed class SalidaService(AppDbContext db)
     }
     private static ApiException Conflicto(string message) => new(message, StatusCodes.Status409Conflict);
     private static ApiException NoEncontrado(string message) => new(message, StatusCodes.Status404NotFound);
-    private static decimal Subtotal(DetalleSalida detail) =>
-        decimal.Round(detail.Cantidad * detail.PrecioUnitario * (1 - detail.DescAplicado / 100m), 2, MidpointRounding.AwayFromZero);
-    private static void ValidarImportes(IEnumerable<DetalleSalida> details)
-    {
-        decimal total = 0;
-        foreach (var d in details)
-        {
-            if (d.Cantidad < 1 || d.PrecioUnitario < 0 || d.PrecioUnitario > MaxImporte
-                || decimal.Round(d.PrecioUnitario, 2) != d.PrecioUnitario
-                || d.DescAplicado < 0 || d.DescAplicado > 100 || decimal.Round(d.DescAplicado, 2) != d.DescAplicado)
-                throw new ApiException("Un detalle contiene cantidades, precios o descuentos inválidos.");
-            var subtotal = Subtotal(d);
-            if (subtotal > MaxImporte || subtotal > MaxImporte - total)
-                throw new ApiException("El total de la salida excede el rango decimal(18,2).");
-            total += subtotal;
-        }
-    }
+    private static void ValidarImportes(IEnumerable<DetalleSalida> details) =>
+        ImportesMovimiento.Validar(details.Select(d => (d.Cantidad, d.PrecioUnitario, d.DescAplicado)),
+            "El total de la salida excede el rango decimal(18,2).");
+
     private static DetalleSalidaResponse Respuesta(DetalleSalida d) =>
-        new(d.Id, d.ProductoId, d.Cantidad, d.PrecioUnitario, d.DescAplicado, Subtotal(d));
+        new(d.Id, d.ProductoId, d.Cantidad, d.PrecioUnitario, d.DescAplicado,
+            ImportesMovimiento.Subtotal(d.Cantidad, d.PrecioUnitario, d.DescAplicado));
     private static SalidaResponse Respuesta(Salida s, IEnumerable<DetalleSalida> details)
     {
         var rows = details.Select(Respuesta).ToList();
