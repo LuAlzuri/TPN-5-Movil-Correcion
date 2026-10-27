@@ -51,9 +51,10 @@ automáticamente por estar escrito aquí.
 
 El usuario autorizó el **paso 11, flujo completo de salidas y carrito**, incluida
 la confirmación por Administrador y Empleado y la referencia del confirmador a Usuario.
-Está implementado localmente en `codex/paso-11-salidas-stock` y validado mediante
+Está publicado en `codex/paso-11-salidas-stock` mediante el PR #12 y validado mediante
 361 comprobaciones temporales aprobadas, sin incorporar pruebas al repositorio.
-No se aplicó la nueva migración ni se publicaron commits o PR de este paso.
+El PR #12 está abierto para revisión e integración por el usuario. No se aplicó
+la nueva migración a ninguna base.
 El paso 12 de validación integral y entrega continúa pendiente de su alcance propio.
 
 | Área | Estado vigente |
@@ -68,7 +69,7 @@ El paso 12 de validación integral y entrega continúa pendiente de su alcance p
 | CRUD completo de proveedores | Paso 9.4 integrado en PR #9 |
 | Productos e imágenes | Paso 9.5 integrado en PR #10 |
 | Ingresos y stock | Paso 10 integrado en PR #11 |
-| Salidas, carrito y stock | Paso 11 implementado y validado localmente; sin publicar |
+| Salidas, carrito y stock | Paso 11 publicado en PR #12; pendiente de integración |
 | Auditoría completa e históricos autorizados | Pendientes |
 | Base personal del usuario | No se verificó ni migró; no asumir que está preparada |
 
@@ -1143,7 +1144,7 @@ El plan original se mantiene con los siguientes estados:
 | 9.4 | CRUD de proveedores | Implementado e integrado en PR #9 |
 | 9.5 | CRUD de productos e imágenes | Implementado e integrado en PR #10 |
 | 10 | Flujo completo de ingresos y stock | Integrado en PR #11 |
-| 11 | Flujo completo de salidas y stock | Implementado y validado localmente; sin publicar |
+| 11 | Flujo completo de salidas y stock | Implementado y publicado en PR #12; pendiente de integración |
 | 12 | Validación integral y entrega | Pendiente |
 
 Los pasos 2 al 6 se revisaron después sin duplicar entidades ni migraciones. Que
@@ -1198,7 +1199,7 @@ autoriza aplicar la migración.
 
 ## 16 Historial de entregas
 
-Estado verificado al iniciar el paso 11: PR #1 al #11 integrados; paso 11 local sin publicar.
+Estado verificado al publicar esta entrega: PR #1 al #11 integrados; PR #12 abierto.
 Los hashes de la columna Commit identifican el trabajo de cada rama.
 
 | Entrega | Rama | Commit | PR |
@@ -1214,11 +1215,14 @@ Los hashes de la columna Commit identifican el trabajo de cada rama.
 | Proveedores | `codex/paso-9-4-proveedores` | `ad4267a` y `2a43284` | [#9](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/9) |
 | Productos e imágenes y retiro de pruebas | `codex/paso-9-5-productos-imagenes` | `9929183` y `c5f20cc` | [#10](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/10) |
 | Ingresos y stock | `codex/paso-10-ingresos-stock` | `6f4150e` y `016d5db` | [#11 integrado](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/11) |
+| Salidas, carrito y stock | `codex/paso-11-salidas-stock` | `e078981` inicial | [#12 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/12) |
 
 El PR #10 ya está integrado mediante `ec5f3ef`, comprobado al iniciar el paso 10.
 El paso 10 se publicó en `codex/paso-10-ingresos-stock`, basada en `origin/main`
 con ese merge, mediante el commit inicial `6f4150e`. El usuario integró el PR #11 mediante `6e35de1`, verificado antes de crear la rama
-local `codex/paso-11-salidas-stock`. El paso 11 todavía no tiene commits ni PR.
+local `codex/paso-11-salidas-stock`. El paso 11 se publicó con el commit inicial
+`e078981` mediante el PR #12. Esta actualización documental se publica en la misma
+rama como seguimiento de la entrega. El merge sigue a cargo del usuario.
 
 ## 17 Fuentes originales y decisiones que las reemplazan
 
