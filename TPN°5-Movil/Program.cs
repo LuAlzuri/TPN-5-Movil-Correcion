@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -61,6 +63,38 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+
+var loginRateLimit = LoginRateLimitSettings.Load(builder.Configuration);
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(LoginRateLimitSettings.PolicyName, context =>
+    {
+        // Use the connection IP only. Forwarded headers must not create trusted identities.
+        var address = context.Connection.RemoteIpAddress;
+        if (address?.IsIPv4MappedToIPv6 == true) address = address.MapToIPv4();
+        return RateLimitPartition.GetFixedWindowLimiter(address?.ToString() ?? "unknown", _ =>
+            new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = loginRateLimit.PermitLimit,
+                Window = TimeSpan.FromSeconds(loginRateLimit.WindowSeconds),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var retry = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var remaining)
+            ? remaining : TimeSpan.FromSeconds(loginRateLimit.WindowSeconds);
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.Headers.RetryAfter =
+            Math.Max(1, (int)Math.Ceiling(retry.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            error = "Demasiados intentos de inicio de sesión. Vuelva a intentarlo más tarde."
+        }, cancellationToken);
+    };
+});
 
 builder.Services.AddCors(options =>
 {
@@ -143,6 +177,7 @@ app.UseStaticFiles(new StaticFileOptions
     OnPrepareResponse = context => context.Context.Response.Headers["X-Content-Type-Options"] = "nosniff"
 });
 
+app.UseRouting();
 app.UseCors();
 
 app.Use(async (context, next) =>
@@ -175,6 +210,9 @@ app.Use(async (context, next) =>
 
 app.UseSwagger();
 app.UseSwaggerUI();
+
+// Endpoint routing must run before the endpoint-specific login limiter.
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

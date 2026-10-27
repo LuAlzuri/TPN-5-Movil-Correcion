@@ -32,17 +32,21 @@ API: `TPN°5-Movil`, ASP.NET Core con .NET 9, EF Core 9 y SQL Server.
 
 ## 1 Estado actual y próximo bloque
 
-**Mejoras posteriores — bloque 1:** implementado localmente en
-`mejoras/proteger-ultimo-administrador`, desde main `1c2761d` (PR #15 integrado).
-El usuario autorizó proteger al último Administrador activo sin cambiar el bootstrap
-ni impedir la autoeliminación cuando queda otro Administrador válido. El controlador
-delega ahora en AuthService, con revalidación del actor y transacción Serializable.
-Resultado: 186 comprobaciones temporales aprobadas en SQL Server, cero fallidas,
-incluidas quince carreras de eliminación. No se incorporaron pruebas al repositorio.
-No hay cambios de esquema ni migración nueva. Después de validar el bloque, el
-usuario autorizó registrar y subir esta entrega por rama para revisión previa al
-merge, que queda a su cargo. El siguiente bloque de implementación es limitar intentos de
-login, con su propio alcance y autorización. Consultar sección 14.4.
+**Mejoras posteriores — bloque 2:** limitador de login implementado localmente en
+`mejoras/limitar-login`, desde main `b95d510` (PR #16 integrado). El usuario autorizó
+5 solicitudes por minuto por IP, configuración y respuesta 429 con Retry-After.
+Se validaron 66 comprobaciones HTTP y 20 de configuración, todas aprobadas,
+mediante pruebas externas al repositorio. No hay cambios de esquema ni migración
+nueva. Después de validar, el usuario autorizó registrar y subir esta entrega por
+rama para revisión antes del merge, que queda a su cargo. El siguiente bloque es
+acordar una batería pequeña de pruebas reproducibles, antes de reincorporar una
+suite versionada. Consultar secciones 7.4 y 14.5.
+
+**Mejoras posteriores — bloque 1:** protección del último Administrador integrada
+en main mediante PR #16, commit de trabajo `f86f508` y merge `b95d510`. Conserva
+bootstrap y autoeliminación cuando queda otro Administrador válido. Su validación
+histórica aprobó 186 comprobaciones en SQL Server, incluidas quince carreras.
+Consultar sección 14.4; esas pruebas no se reejecutaron completas en el bloque 2.
 
 **Actualización del bloque 12.3 (27 de octubre de 2026):** se completó la validación
 funcional en SQL Server 2022/Linux desde `dc37184` y se corrigieron dos diferencias
@@ -370,6 +374,53 @@ Los helpers `Security/UsuarioAutenticado.cs` permiten obtener UsuarioId, Cliente
 y EmpleadoId del principal validado. Salidas usa ObtenerUsuarioId para su confirmador
 y ObtenerClienteId para la propiedad del carrito. CORS sigue
 permisivo para orígenes, métodos y cabeceras, sin credenciales de cookies.
+
+### 7.4 Límite de solicitudes de login — mejoras, bloque 2
+
+`POST /api/auth/login` usa una política por IP de conexión con ventana fija,
+implementada con el middleware integrado de ASP.NET Core. Valores predeterminados:
+
+```json
+"LoginRateLimit": {
+  "PermitLimit": 5,
+  "WindowSeconds": 60
+}
+```
+
+Se documentan en appsettings.example.json. También se pueden definir mediante
+LoginRateLimit__PermitLimit y LoginRateLimit__WindowSeconds. Ambos deben ser enteros
+positivos; configuraciones no numéricas, vacías, cero, negativas o fuera del rango
+int se rechazan al arrancar. WindowSeconds admite hasta 4294967 segundos, límite
+técnico del temporizador de .NET; valores mayores también se rechazan al arrancar
+en vez de fallar en el primer login. Los cambios requieren reiniciar la instancia.
+
+Se cuentan todas las solicitudes que llegan al endpoint: credenciales correctas,
+incorrectas y cuerpos inválidos. No es un contador de contraseñas fallidas. Las
+primeras cinco conservan los resultados habituales 200/401/400 según el caso; la
+sexta dentro de la ventana responde 429 antes de ejecutar la autenticación de
+credenciales. No hay cola ni bloqueo permanente de cuentas.
+
+El rechazo contiene el JSON `{ "error": "Demasiados intentos de inicio de sesión.
+Vuelva a intentarlo más tarde." }` y Retry-After en segundos enteros positivos,
+redondeados hacia arriba. El código 429 figura en Swagger. El limitador repone
+el cupo al pasar la ventana; no modifica cuentas, hashes, tokens ni roles.
+
+Solo aplica al POST de login. GET /api/auth/me, registro administrativo, usuarios,
+Swagger y otras rutas conservan sus permisos y contratos. Las preflight CORS
+siguen funcionando aunque el cupo esté agotado. Se hace explícito UseRouting
+antes de CORS y del limitador para que se seleccione la política del endpoint;
+la política CORS sigue permisiva.
+
+La clave es RemoteIpAddress, normalizando IPv4 mapeada a IPv6. Si la conexión no
+ofrece IP, se comparte el cupo bajo unknown. No se confía en X-Forwarded-For,
+X-Real-IP ni Forwarded enviados por el cliente. Antes de desplegar detrás de un
+proxy hay que configurar explícitamente proxies/redes confiables; no habilitar
+confianza indiscriminada en esos encabezados.
+
+Personas detrás de la misma IP comparten cupo. Los contadores están en memoria,
+son independientes por instancia y se reinician al reiniciar la API. No es un
+límite distribuido entre servidores ni un bloqueo por cuenta; no se afirma que
+impida por sí solo ataques repartidos entre muchas IP.
 
 ## 8 Categorías implementadas
 
@@ -1464,13 +1515,49 @@ probar el código; no se creó una migración nueva ni se tocó una base persona
 La instancia descartable y la API de prueba se detuvieron al finalizar. La suite
 versionada retirada no se reintrodujo ni se reejecutó toda la batería de 12.3.
 
+### 14.5 Límite de login — mejoras, bloque 2
+
+El usuario autorizó modificar Program, AuthController, configuración de ejemplo,
+una clase de configuración y este documento. No se modificaron servicios de
+credenciales, entidades, CORS permisivo, esquema ni el bootstrap. No se generó
+una migración vacía.
+
+Se ejecutaron 66 comprobaciones HTTP reales y 20 de configuración fuera del
+repositorio. Todas aprobaron. Se usaron tres procesos locales con IP de origen
+real controlada y una base SQL Server 2022 descartable para los logins correctos:
+
+- Política predeterminada: cinco solicitudes mixtas conservan 200/401/400; sexta
+  recibe 429 con JSON, Content-Type y Retry-After positivo.
+- Cambiar mayúsculas o barra final de la ruta no permite eludir el límite.
+- Cambiar X-Forwarded-For, X-Real-IP o Forwarded no crea un cupo nuevo.
+- Otra IP real tiene cupo independiente, incluso para la misma cuenta.
+- Una IP con login bloqueado sigue usando rutas autenticadas, registro, Swagger,
+  respuestas 401/403/404/405 y preflight CORS según sus permisos.
+- Instancia configurada con dos solicitudes y ventana de dos segundos rechaza la
+  tercera; al vencer la ventana permite un login correcto. Otra instancia conserva
+  su cupo bloqueado: no hay reinicio compartido de contadores.
+- Doce solicitudes concurrentes contra un cupo de tres admiten exactamente tres
+  y rechazan nueve, con el mismo contrato de error y espera.
+- Se prueban valores predeterminados, configuración parcial y completa y rechazo
+  de números cero/negativos, cadenas vacías/no numéricas, fracciones y overflow, además del límite real del temporizador y sus valores superiores.
+
+La primera ejecución del harness se interrumpió al nombrar una función igual que
+el módulo concurrent; se corrigió el script externo y se reiniciaron los procesos
+para repetir la ejecución completa con los cupos vacíos. No fue un defecto de la API.
+
+La solución compila sin errores ni advertencias y EF Core no detecta diferencias
+pendientes de modelo. Las catorce migraciones existentes se ejecutaron únicamente
+para preparar la base descartable; no se modificó una base personal. Al finalizar
+se detuvieron las tres API y se eliminó el contenedor de pruebas. No se reintrodujo
+la suite retirada ni se reejecutó la batería integral de 12.3 o del bloque 1.
+
 ## 15 Plan de trabajo y alcance por autorizar
 Plan de mejoras acordado después del informe de revisión:
 
 | Bloque | Alcance | Estado |
 | --- | --- | --- |
-| 1 | Proteger al último Administrador activo | Implementado y validado; entrega por rama autorizada para revisión |
-| 2 | Limitar intentos de login | Pendiente de alcance y autorización |
+| 1 | Proteger al último Administrador activo | Integrado en PR #16 |
+| 2 | Limitar intentos de login | Implementado y validado; entrega por rama autorizada para revisión |
 | 3 | Acordar una batería pequeña de pruebas reproducibles | Pendiente; no reintroducir pruebas versionadas por suposición |
 | 4 | Simplificar paginado, normalización y grupos de permisos | Pendiente, conservando contratos y matriz de autorización |
 | Resto | Otras recomendaciones del informe | Postergadas hasta finalizar los cuatro bloques |
