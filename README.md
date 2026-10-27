@@ -251,11 +251,11 @@ dotnet test
 dotnet test tests/TPN5.Integration/TPN5.Integration.csproj --logger 'trx;LogFileName=resultado.trx'
 ```
 
-La suite actual contiene **35 casos: 20 de integración y 15 unitarios**. Cubre autenticación, roles, último Administrador, perfiles, revocación, paginado, borrado lógico, cancelados propios, ingresos, carritos, concurrencia de stock, rollback, importes e imágenes.
+La suite actual contiene **36 casos: 21 de integración y 15 unitarios**. Cubre autenticación, roles, último Administrador, perfiles, revocación, paginado, borrado lógico, cancelados propios, ingresos, carritos, concurrencia de stock, rollback, importes e imágenes.
 
 Testcontainers inicia SQL Server con imagen fijada por digest. Las pruebas crean bases y carpetas temporales propias, aplican las 14 migraciones y eliminan sus recursos. Reemplazan expresamente la conexión de la API; no requieren claves JWT ni contraseñas SQL personales. Si Docker no está disponible, la integración falla: no se omite silenciosamente.
 
-La última ejecución registrada del cambio de cancelados aprobó los 35 casos, sin fallos ni omisiones. Es evidencia de esa versión, no una garantía de cobertura de todas las combinaciones posibles ni un reporte de haber probado individualmente los 74 endpoints.
+La ejecución registrada del cambio de cancelados aprobó 35 casos; la del log de errores aprobó 36, sin fallos ni omisiones. Es evidencia de esa versión, no una garantía de cobertura de todas las combinaciones posibles ni un reporte de haber probado individualmente los 74 endpoints.
 
 ### Verificación del modelo sin base real
 
@@ -273,6 +273,20 @@ Comprueba entidades, relaciones, filtros y migraciones sin abrir una conexión S
 - **Cliente:** catálogo con cards, carrito y consulta de pedidos; navegación inferior con carrito central.
 
 La reducción del alcance del frontend no elimina los CRUD administrativos del backend. El diseño mínimo no incluye gestión de usuarios, empleados o clientes en las vistas. No se han implementado aquí esas pantallas ni el registro público/cambio de roles propuesto y luego dejado fuera del alcance.
+
+## Registro de errores
+
+Los errores inesperados conservan la respuesta HTTP 500 genérica y se registran
+con ILogger y Serilog en archivos JSON por línea, en `logs/errores-.log` bajo la
+raíz de contenido de la API. El evento central incluye excepción, método, ruta,
+usuario e identificador de petición; no registra cuerpos ni cabeceras de solicitudes.
+Los logs no son una auditoría de todas las operaciones de negocio.
+
+La ruta puede configurarse con `ErrorLog__Path`. Mantenerla fuera de `wwwroot` y
+otorgar permisos de escritura al proceso. Hay rotación diaria y por tamaño de
+10 MiB, con retención de siete archivos. La carpeta predeterminada se excluye de
+Git y de publicación; en despliegue elegir almacenamiento persistente. Si hay
+varias instancias, usar una ruta de log diferente para cada una.
 
 ## Documentación y forma de trabajo
 

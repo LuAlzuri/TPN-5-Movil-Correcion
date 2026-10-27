@@ -25,6 +25,7 @@ internal sealed class ApiFactory(string connectionString, string webRoot, bool l
     {
         builder.UseEnvironment("Testing");
         builder.UseWebRoot(webRoot);
+        builder.UseSetting("ErrorLog:Path", Path.Combine(webRoot, "..", "logs", "errores-.log"));
         builder.UseSetting("Jwt:Issuer", "tpn5-tests");
         builder.UseSetting("Jwt:Audience", "tpn5-tests");
         builder.UseSetting("Jwt:Key", Convert.ToBase64String(RandomNumberGenerator.GetBytes(48)));
@@ -32,7 +33,7 @@ internal sealed class ApiFactory(string connectionString, string webRoot, bool l
         // Keep setup logins from exhausting the quota in unrelated scenarios.
         builder.UseSetting("LoginRateLimit:PermitLimit", loginLimitScenario ? "5" : "100");
         builder.UseSetting("LoginRateLimit:WindowSeconds", loginLimitScenario ? "5" : "60");
-        builder.ConfigureLogging(logging => logging.ClearProviders());
+        builder.ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Error));
         builder.ConfigureServices(services =>
         {
             // Always replace application bindings. Never connect to user-configured databases.
@@ -55,7 +56,8 @@ public sealed class TestApplication : IAsyncDisposable
     public HttpClient Http { get; }
     public string Password { get; } = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24)) + "aA1!";
     public TestAccount Admin { get; private set; } = null!;
-    public string Uploads => Path.Combine(root, "uploads");
+    public string Uploads => Path.Combine(root, "wwwroot", "uploads");
+    public string Logs => Path.Combine(root, "logs");
 
     private TestApplication(string serverConnection, bool loginLimitScenario)
     {
@@ -66,7 +68,7 @@ public sealed class TestApplication : IAsyncDisposable
         connectionString = builder.ConnectionString;
         root = Path.Combine(Path.GetTempPath(), "tpn5-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        factory = new ApiFactory(connectionString, root, loginLimitScenario);
+        factory = new ApiFactory(connectionString, Path.Combine(root, "wwwroot"), loginLimitScenario);
         try { Http = factory.CreateClient(); }
         catch
         {

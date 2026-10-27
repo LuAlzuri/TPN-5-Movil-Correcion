@@ -368,3 +368,6 @@ TPN°5-Movil/wwwroot/uploads/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Runtime error logs must not be published with the application.
+TPN°5-Movil/logs/
