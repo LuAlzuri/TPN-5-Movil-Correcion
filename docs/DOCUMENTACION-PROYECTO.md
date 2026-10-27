@@ -32,15 +32,22 @@ API: `TPN°5-Movil`, ASP.NET Core con .NET 9, EF Core 9 y SQL Server.
 
 ## 1 Estado actual y próximo bloque
 
-**Mejoras posteriores — bloque 2:** limitador de login implementado localmente en
-`mejoras/limitar-login`, desde main `b95d510` (PR #16 integrado). El usuario autorizó
-5 solicitudes por minuto por IP, configuración y respuesta 429 con Retry-After.
-Se validaron 66 comprobaciones HTTP y 20 de configuración, todas aprobadas,
-mediante pruebas externas al repositorio. No hay cambios de esquema ni migración
-nueva. Después de validar, el usuario autorizó registrar y subir esta entrega por
-rama para revisión antes del merge, que queda a su cargo. El siguiente bloque es
-acordar una batería pequeña de pruebas reproducibles, antes de reincorporar una
-suite versionada. Consultar secciones 7.4 y 14.5.
+**Mejoras posteriores — bloque 3:** batería reducida implementada localmente en
+`mejoras/pruebas-reproducibles`, desde main `28a12dc` (PR #17 integrado). El usuario
+autorizó expresamente guardar doce escenarios reproducibles, reemplazando la
+instrucción de retiro solo para esta nueva batería. Proyecto:
+`tests/TPN5.Integration`, xUnit y SQL Server real administrado por Testcontainers.
+La ejecución final aprobó doce pruebas, cero fallidas y cero omitidas. No se
+modificaron código funcional, esquema ni contratos. Después de la validación, el
+usuario autorizó registrar esta entrega en una rama para revisión previa al merge,
+que queda a su cargo. El siguiente es simplificar paginado, normalización y
+grupos de permisos, con alcance propio y esta batería como regresión. Ver 14.6.
+
+**Mejoras posteriores — bloque 2:** límite del login integrado en main mediante
+PR #17, commit `28c0ef3` y merge `28a12dc`. Conserva cinco solicitudes por minuto
+por IP de forma predeterminada, configuración y rechazo 429 con Retry-After.
+Su validación histórica aprobó 66 comprobaciones HTTP y 20 de configuración.
+Consultar secciones 7.4 y 14.5; no se reejecutó toda esa batería temporal aquí.
 
 **Mejoras posteriores — bloque 1:** protección del último Administrador integrada
 en main mediante PR #16, commit de trabajo `f86f508` y merge `b95d510`. Conserva
@@ -62,10 +69,11 @@ exclusivos de una instancia SQL Server descartable. No se modificó ninguna base
 personal. No se agregó una suite de pruebas al repositorio ni una migración vacía.
 Consultar la sección 14.3 para alcance y límites.
 
-La última suite versionada aprobó 165 pruebas en SQLite aislada, con 0 fallidas y
+La suite histórica retirada aprobó 165 pruebas en SQLite aislada, con 0 fallidas y
 0 omitidas. Después de esa ejecución el usuario pidió eliminar todas las pruebas
 exitosas: se retiraron la carpeta tests y su proyecto de la solución. Los resultados
-se conservan como evidencia histórica, sin una suite versionada actual.
+se conservan como evidencia histórica. La nueva batería de doce escenarios
+versionados del bloque 3 no restaura esa suite antigua.
 El registro transaccional, la autenticación y los CRUD de
 categorías, empleados, clientes, proveedores y productos/imágenes están implementados.
 El paso 10 de ingresos y stock está publicado en el PR #11 y validado mediante
@@ -74,8 +82,8 @@ El PR #11 está integrado en main mediante `6e35de1`, verificado al iniciar el p
 Los resultados figuran en la sección 14.
 La unicidad de CUIT/CUIL entre clientes y entre proveedores tiene migraciones propias.
 
-Los PR del 1 al 14 están integrados en `main`, verificado al iniciar el bloque
-12.3. El último es el PR #14, integrado mediante `dc37184`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
+Los PR del 1 al 17 están integrados en `main`, verificado al iniciar el bloque
+3 de mejoras. El último es el PR #17, integrado mediante `28a12dc`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
 automáticamente por estar escrito aquí.
 
 El usuario autorizó el **paso 11, flujo completo de salidas y carrito**, incluida
@@ -1205,10 +1213,13 @@ dotnet run --project tools/Schema/Schema.csproj
 Tras aprobar las 165 pruebas del paso 9.5, el usuario pidió eliminar todas las
 pruebas exitosas. Se quitaron tests/Auth.Integration y su referencia en la solución,
 incluidas las fuentes de autenticación, categorías, empleados, clientes, CUIL,
-proveedores, productos e imágenes. No queda proyecto de pruebas versionado.
+proveedores, productos e imágenes. Esa suite se mantiene retirada; el usuario
+autorizó posteriormente una batería nueva y reducida en tests/TPN5.Integration.
 El comando `dotnet test tests/Auth.Integration/Auth.Integration.csproj` deja de
-ser un comando vigente. La instrucción de retiro prevalece sobre las referencias
-históricas anteriores. tools/Schema se conserva como herramienta de migraciones
+ser un comando vigente. El comando actual de la nueva batería es
+`dotnet test tests/TPN5.Integration/TPN5.Integration.csproj`, con Docker iniciado.
+La autorización del bloque 3 permite esta batería, sin restaurar las anteriores.
+tools/Schema se conserva como herramienta de migraciones
 e inspección del modelo; no es el proyecto de pruebas retirado.
 
 La suite retirada usaba SQLite en memoria, aislada por caso, sin credenciales
@@ -1551,14 +1562,110 @@ para preparar la base descartable; no se modificó una base personal. Al finaliz
 se detuvieron las tres API y se eliminó el contenedor de pruebas. No se reintrodujo
 la suite retirada ni se reejecutó la batería integral de 12.3 o del bloque 1.
 
+### 14.6 Batería reducida reproducible — mejoras, bloque 3
+
+El usuario autorizó incorporar y conservar un proyecto de pruebas, su referencia
+en la solución y esta documentación. No se cambian rutas, respuestas, entidades,
+servicios productivos ni migraciones. No se restablece la suite histórica de 165
+casos ni se convierten las comprobaciones temporales anteriores en pruebas nuevas.
+
+**Requisitos:** SDK .NET 9 actualizado, Docker iniciado con contenedores Linux y
+arquitectura x86-64 compatible con SQL Server 2022. Se recomienda asignar al motor
+Docker al menos 4 GiB de RAM. No hace falta instalar SQL Server/LocalDB en el host.
+La primera ejecución descarga paquetes y las imágenes de SQL Server y del recolector
+de recursos de Testcontainers; requiere acceso a sus registros. Si Docker no está
+disponible, el inicio falla: no se omiten pruebas ni se informa éxito sin ejecutarlas.
+
+Desde la raíz del repositorio:
+
+```bash
+dotnet test
+```
+
+También puede seleccionarse el proyecto y guardar resultados:
+
+```bash
+dotnet test tests/TPN5.Integration/TPN5.Integration.csproj --logger "trx;LogFileName=critical.trx"
+```
+
+Los resultados TRX, bin y obj quedan ignorados por Git. No se requiere configurar
+cadenas de conexión personales, contraseñas SQL ni claves JWT. Las credenciales
+se generan en memoria para cada ejecución. La imagen de SQL Server 2022 está
+fijada por digest en SqlServerFixture; Testcontainers asigna un puerto disponible.
+Su recolector y DisposeAsync eliminan los recursos propios al terminar. No se usa
+AUTH_TEST_SQLSERVER_CONNECTION ni una instancia personal como alternativa.
+
+Cada prueba crea una base `TPN5_Test_<GUID>` dentro del contenedor propio y aplica
+las catorce migraciones reales, luego elimina esa base. Una carpeta temporal
+`tpn5-tests-<GUID>` fuera del repositorio aloja las imágenes y se elimina al cerrar
+la aplicación. Las vinculaciones de DbContext se reemplazan expresamente para no
+usar la conexión de appsettings o del entorno del usuario. Nunca se ejecuta
+EnsureDeleted contra una base tomada de configuración personal.
+
+WebApplicationFactory ejecuta el pipeline HTTP y los servicios reales en memoria;
+SQL Server ejecuta consultas, constraints, transacciones y bloqueos reales. La
+creación inicial de Administrador usa el servicio de bootstrap explícito; los
+tokens de los casos provienen de login real, sin tokens artificiales.
+
+| Escenario | Cobertura principal |
+| --- | --- |
+| 1 | Login correcto, errores genéricos y edición normalizada del email de Usuario |
+| 2 | 429, Retry-After, reposición de cupo y otras rutas sin bloqueo |
+| 3 | Matriz de roles y acceso anónimo |
+| 4 | Registro/perfil, rollback y edición normalizada de Cliente/Empleado |
+| 5 | Último Administrador protegido frente a autoeliminaciones simultáneas |
+| 6 | Soft delete, perfil conservado, recurso oculto y token revocado |
+| 7 | Paginado estable y parámetros inválidos en nueve listados |
+| 8 | Ingreso borrador, descuento histórico, confirmación y reversión única |
+| 9 | Carrito propio, detalle único y rechazo de acceso/identidad ajenos |
+| 10 | Cantidades 0..stock, cero retira y venta deja stock en cero |
+| 11 | Confirmación única, ventas competidoras, reversión insuficiente y rollback parcial |
+| 12 | PNG real, reemplazo único, archivos/MIME inválidos y limpieza del archivo anterior |
+
+El escenario 2 usa cinco permisos y una ventana de cinco segundos para comprobar
+la espera sin agregar un minuto a cada ejecución; también comprueba los valores
+predeterminados 5/60. Los demás escenarios usan un cupo alto para no agotar el login
+durante la preparación de actores. Esto es configuración exclusiva de pruebas,
+no cambia el limitador ni los valores predeterminados de la API.
+
+Se fuerza un fallo de perfil mediante un CHECK temporal y un fallo de stock en el
+segundo producto mediante otra restricción, dentro de bases propias. Se comprueba
+que no persistan cuentas huérfanas, descuentos parciales, estado ni confirmador.
+Después de retirar la restricción, el reintento confirma una sola vez. No se
+silencian errores de SQL ni se eliminan controles de producción para obtener verde.
+
+Se verifican también edición y normalización de email/nombres de Usuario, Cliente
+y Empleado, login posterior al cambio y normalización de teléfono vacío/dirección.
+Estos casos se mantienen dentro de los doce escenarios para proteger la posterior
+simplificación de campos comunes, sin restaurar la suite histórica.
+
+La auditoría inicial encontró dos avisos altos de SSH.NET transitivo con
+Testcontainers 4.8.1. Se actualizó Testcontainers.MsSql a 4.16.0, compatible con
+.NET 9 e incorporando SSH.NET corregido, y se adoptó el constructor de imagen
+actual. La auditoría con `dotnet list tests/TPN5.Integration/TPN5.Integration.csproj
+package --vulnerable --include-transitive` no reportó paquetes vulnerables en las
+fuentes consultadas. No se suprimieron alertas ni se cambiaron dependencias de la API.
+
+**Validación del bloque:** doce pruebas aprobadas, cero fallidas y cero omitidas,
+en SQL Server 2022/Linux. La primera ejecución ya pasó, pero mostró EF1002 en la
+preparación de una restricción interpolada. Se reemplazó por SQL constante y un
+producto de prueba identificado por nombre, sin suprimir el analizador; se repitió
+la batería completa sin advertencias. El contenedor y las carpetas temporales se
+eliminaron al finalizar. La suite no valida un proxy de producción, TLS del
+servidor publicado ni todas las variantes de las baterías históricas de 12.3.
+
+Para el bloque 4, ejecutar esta batería antes y después de cada simplificación.
+Un fallo requiere investigar su causa: no actualizar expectativas ni quitar
+aserciones para acomodar un cambio de comportamiento no autorizado.
+
 ## 15 Plan de trabajo y alcance por autorizar
 Plan de mejoras acordado después del informe de revisión:
 
 | Bloque | Alcance | Estado |
 | --- | --- | --- |
 | 1 | Proteger al último Administrador activo | Integrado en PR #16 |
-| 2 | Limitar intentos de login | Implementado y validado; entrega por rama autorizada para revisión |
-| 3 | Acordar una batería pequeña de pruebas reproducibles | Pendiente; no reintroducir pruebas versionadas por suposición |
+| 2 | Limitar intentos de login | Integrado en PR #17 |
+| 3 | Batería pequeña de pruebas reproducibles | Implementada y validada; entrega por rama autorizada para revisión |
 | 4 | Simplificar paginado, normalización y grupos de permisos | Pendiente, conservando contratos y matriz de autorización |
 | Resto | Otras recomendaciones del informe | Postergadas hasta finalizar los cuatro bloques |
 
