@@ -38,13 +38,13 @@ control de emails duplicados y traducción de restricciones únicas; los permiso
 usan constantes de agrupación de los mismos roles existentes. Se conservaron
 contratos, mensajes y reglas de negocio, sin cambios de esquema. Ver 14.7.
 
-**Nueva planificación de simplificación:** revisada contra main `4177555` a partir
-del archivo `Plan_simplificacion_API_TPN5.docx`. El bloque 1 completó la referencia
-funcional con build y doce pruebas aprobadas. Posteriormente, el usuario autorizó
-el bloque 2: implementado localmente en `mejoras/simplificacion-bloque-2`, con
-compilación sin advertencias y trece pruebas aprobadas antes y después. Ver 15.1
-y 15.2. El usuario autorizó posteriormente el commit y la publicación en rama
-para revisión mediante PR; el merge queda a su cargo. Los bloques posteriores
+**Nueva planificación de simplificación:** el bloque 1 fijó la referencia
+funcional y el bloque 2 se integró mediante PR #20, commit `9e52d72` y merge
+`9b2ea73`. El usuario autorizó luego implementar localmente el bloque 3 en
+`mejoras/simplificacion-bloque-3`, desde ese main: se comparten cálculos y
+validación de importes de ingresos, salidas y auditoría. Ver 15.1 a 15.3.
+El usuario autorizó posteriormente el commit y la publicación del bloque 3 en
+rama para revisión mediante PR; el merge queda a su cargo. Los bloques posteriores
 requieren autorización propia.
 
 **Mejoras posteriores — bloque 3:** batería reducida integrada mediante PR #18,
@@ -1729,7 +1729,7 @@ El 27 de octubre de 2026 se revisó `Plan_simplificacion_API_TPN5.docx` contra m
 `4177555ac9a61cf00d4ed4d01434226e985333a3`. Su contenido se evalúa como propuesta,
 no como una orden de ejecución. La solicitud inicial autorizó revisar el documento
 y actualizar esta documentación; posteriormente se autorizó implementar localmente
-el bloque 2. Cada bloque de código requiere explicación y autorización propias;
+los bloques 2 y 3. Cada bloque de código requiere explicación y autorización propias;
 commit, publicación, PR y merge mantienen las reglas vigentes.
 
 La estrategia es extraer duplicación concreta sin repetir el bloque 4 ya integrado.
@@ -1741,8 +1741,8 @@ protección del último Administrador y limitador de login.
 | Orden nuevo | Alcance propuesto | Estado y precauciones |
 | --- | --- | --- |
 | 1 | Fijar contratos y referencia funcional; corregir documentación | Completado: documentación revisada, build sin advertencias y doce pruebas aprobadas contra main 4177555 |
-| 2 | Quitar `ValidarPagina` que solo delega en `Paginacion.Validar`, reutilizar texto opcional de descripción de Producto, retirar `AsQueryable` redundante y compartir proyección de Empleado | Implementado localmente; ver 15.2 |
-| 3 | Compartir subtotal y reglas monetarias de ingresos, salidas y auditoría mediante un helper pequeño | Pendiente; riesgo de alterar redondeo, precisión, límites o traducción SQL; mantener mensajes propios |
+| 2 | Quitar `ValidarPagina` que solo delega en `Paginacion.Validar`, reutilizar texto opcional de descripción de Producto, retirar `AsQueryable` redundante y compartir proyección de Empleado | Integrado en PR #20; ver 15.2 |
+| 3 | Compartir subtotal y reglas monetarias de ingresos, salidas y auditoría mediante un helper pequeño | Implementado localmente; ver 15.3 |
 | 4 | Compartir únicamente asignaciones de Nombre, Apellido, CUIT y Email de Usuario | Pendiente y condicionado a reducir repetición neta; mantener validaciones por perfil, contraseña y un único SaveChanges |
 | 5 | Extraer configuración de JWT, limitador y Swagger de Program | Opcional; puede aumentar líneas; conservar opciones, orden del middleware, CORS y bootstrap explícito |
 | 6 | Revisar intención de métodos transaccionales e históricos | Opcional y posterior; no retirar revalidaciones, bloqueos, actualizaciones condicionadas ni comprobaciones de filas afectadas; no agregar reintentos automáticos |
@@ -1839,8 +1839,78 @@ de doce escenarios y de las verificaciones históricas. No cubre todas las
 variantes de búsqueda u orden posibles ni un servidor de producción.
 
 No cambian DTOs, rutas, permisos, entidades, modelo, esquema ni reglas de stock.
-No corresponde generar migraciones. El siguiente bloque propuesto, todavía sin
-autorización, es compartir cálculos monetarios preservando redondeos y límites.
+No corresponde generar migraciones. Posteriormente el usuario integró esta
+entrega mediante PR #20 y autorizó el bloque 3, descrito a continuación.
+
+
+### 15.3 Nuevo bloque 3: cálculos monetarios compartidos
+
+Autorización: implementación local de helper, adaptación de Ingresos, Salidas y
+Auditoría, pruebas significativas y actualización de esta documentación. Rama
+`mejoras/simplificacion-bloque-3`, desde main `9b2ea73` con PR #20 integrado.
+Posteriormente el usuario autorizó registrar y publicar esta entrega en una rama
+para revisión mediante PR antes de integrar main. El merge queda a su cargo.
+
+`Services/ImportesMovimiento.cs` concentra la fórmula de subtotal con descuento
+0..100 y redondeo a dos decimales AwayFromZero. Su validación común conserva
+cantidad positiva, precio no negativo, precisión máxima de dos decimales,
+límite decimal(18,2) por precio, subtotal y acumulado. El total se comprueba
+sumando subtotales ya redondeados. Cada servicio mantiene su mensaje original
+para el exceso de total; el error de detalle inválido sigue siendo 400 con el
+mismo texto. No se agregan entidades base, servicios genéricos ni cambios de DTO.
+
+Ingresos y Salidas proyectan únicamente cantidad, precio histórico y descuento
+al validador común. Sus métodos operativos y consultas, desde ListarAsync hasta
+antes de los métodos monetarios privados, se compararon con main y permanecen
+idénticos: no cambian bloqueos, revalidación de actores, stock, transacciones,
+actualizaciones condicionadas ni controles de filas afectadas. Se mantienen la
+captura del precio al agregar un detalle y la suma de subtotales en las respuestas.
+
+Auditoría reutiliza la misma fórmula al construir las respuestas. Se mantienen
+los filtros, orden, conteo y paginado IQueryable ejecutados por EF/SQL Server; el
+cálculo continúa en la proyección final o después de materializar la página,
+como antes. No se agregan ToList anticipados ni cargas completas de movimientos
+para llamar al helper, y no se habilitan rutas ni roles adicionales.
+
+**Cobertura nueva:** dos escenarios HTTP/SQL verifican redondeo de mitad por
+cada detalle (0,005 se informa como 0,01), descuentos 0/50/100 y total como suma
+de subtotales; precio histórico tras modificar Producto y editar cantidad;
+coincidencia con auditoría de ingresos, salidas y movimientos filtrados/paginados;
+precio máximo aceptado, subtotal o acumulado fuera de rango rechazado sin
+persistencia parcial; precisión y límites de precio/descuento; cantidad Int32
+máxima con descuento 100 y rechazo de carrito sin disponibilidad. Las expectativas
+anteriores se conservan. Se añaden quince casos unitarios del helper para
+precisión de precio/descuento, cantidades inválidas, límites, mensajes y redondeos,
+incluido descuento de dos decimales.
+
+**Medición**, incluyendo el helper nuevo y con el mismo criterio que el bloque 2:
+
+| Medida de API | Antes | Después | Reducción neta |
+| --- | --- | --- | --- |
+| Archivos C# funcionales | 51 | 52 | Se agrega un helper |
+| Líneas físicas | 3.427 | 3.423 | 4 |
+| Líneas no vacías | 3.043 | 3.037 | 6 |
+
+Se excluyen Migrations, bin, obj, tests, tools y documentación de esa medición.
+Pruebas agregan por separado 100 líneas en CriticalScenarios.cs y un archivo
+unitario de 64 líneas. La reducción física es menor que la estimada por el plan;
+el beneficio consiste en mantener una sola fórmula y una sola validación común,
+sin compactar el código ni quitar controles para cumplir una cuota.
+
+**Verificación efectiva:** referencia inicial de trece pruebas aprobadas; antes
+de extraer la fórmula, quince escenarios de integración aprobados (incluidos los
+dos nuevos). Después, build con cero errores y cero advertencias, y treinta casos
+aprobados: quince de integración y quince unitarios, cero fallidos y cero omitidos.
+No se cambiaron expectativas previas. Se comprobó también que Auditoría solo
+cambia las llamadas a la fórmula, conservando exactamente sus consultas y paginado.
+`git diff --check` sin errores. Resultados TRX, bin y obj no se versionan.
+No se ejecutaron todas las baterías históricas ni pruebas de un despliegue real.
+
+No cambian entidades, DbContext, esquema ni migraciones. No se modifican bases
+personales: las pruebas de integración usan SQL Server descartable y las catorce
+migraciones existentes. El siguiente bloque propuesto, todavía sin autorización,
+es compartir asignaciones de datos de Usuario solo si reduce repetición y mantiene
+explícitas las validaciones y responsabilidades por perfil.
 
 
 El plan original se mantiene con los siguientes estados:

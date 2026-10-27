@@ -11,8 +11,6 @@ namespace TPN_5_MOVIL.Services;
 
 public sealed class IngresoService(AppDbContext db)
 {
-    private const decimal MaxImporte = 9999999999999999.99m;
-
     public async Task<PaginatedResult<IngresoResponse>> ListarAsync(int page, int pageSize,
         int? productoId, int? proveedorId, DateTime? desde, DateTime? hasta, CancellationToken ct)
     {
@@ -228,27 +226,13 @@ public sealed class IngresoService(AppDbContext db)
             return (g.Key, (int)quantity);
         }).ToList();
 
-    private static decimal Subtotal(DetalleIngreso detail) =>
-        decimal.Round(detail.Cantidad * detail.PrecioUnitario * (1 - detail.DescAplicado / 100m), 2, MidpointRounding.AwayFromZero);
-
-    private static void ValidarImportes(IEnumerable<DetalleIngreso> details)
-    {
-        decimal total = 0;
-        foreach (var detail in details)
-        {
-            if (detail.Cantidad < 1 || detail.PrecioUnitario < 0 || detail.PrecioUnitario > MaxImporte
-                || decimal.Round(detail.PrecioUnitario, 2) != detail.PrecioUnitario
-                || detail.DescAplicado < 0 || detail.DescAplicado > 100 || decimal.Round(detail.DescAplicado, 2) != detail.DescAplicado)
-                throw new ApiException("Un detalle contiene cantidades, precios o descuentos inválidos.");
-            var subtotal = Subtotal(detail);
-            if (subtotal > MaxImporte || subtotal > MaxImporte - total)
-                throw new ApiException("El total del ingreso excede el rango decimal(18,2).");
-            total += subtotal;
-        }
-    }
+    private static void ValidarImportes(IEnumerable<DetalleIngreso> details) =>
+        ImportesMovimiento.Validar(details.Select(d => (d.Cantidad, d.PrecioUnitario, d.DescAplicado)),
+            "El total del ingreso excede el rango decimal(18,2).");
 
     private static DetalleIngresoResponse Respuesta(DetalleIngreso d) =>
-        new(d.Id, d.ProductoId, d.Cantidad, d.PrecioUnitario, d.DescAplicado, Subtotal(d));
+        new(d.Id, d.ProductoId, d.Cantidad, d.PrecioUnitario, d.DescAplicado,
+            ImportesMovimiento.Subtotal(d.Cantidad, d.PrecioUnitario, d.DescAplicado));
 
     private static IngresoResponse Respuesta(Ingreso i, IEnumerable<DetalleIngreso> details)
     {
