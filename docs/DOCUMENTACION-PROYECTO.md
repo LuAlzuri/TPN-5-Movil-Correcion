@@ -38,9 +38,9 @@ exitosas: se retiraron la carpeta tests y su proyecto de la solución. Los resul
 se conservan como evidencia histórica, sin una suite versionada actual.
 El registro transaccional, la autenticación y los CRUD de
 categorías, empleados, clientes, proveedores y productos/imágenes están implementados.
-El paso 10 de ingresos y stock está implementado localmente y validado mediante
+El paso 10 de ingresos y stock está publicado en el PR #11 y validado mediante
 242 comprobaciones temporales, sin volver a incorporar pruebas al repositorio.
-El usuario autorizó su commit, subida y preparación del PR para revisión.
+El PR #11 está abierto para revisión y pendiente de integración por el usuario.
 Los resultados figuran en la sección 14.
 La unicidad de CUIT/CUIL entre clientes y entre proveedores tiene migraciones propias.
 
@@ -64,7 +64,7 @@ y autorización. El flujo de inventario continúa pendiente de sus propios bloqu
 | CRUD completo de clientes | Paso 9.3 integrado en PR #8 |
 | CRUD completo de proveedores | Paso 9.4 integrado en PR #9 |
 | Productos e imágenes | Paso 9.5 integrado en PR #10 |
-| Ingresos y stock | Paso 10 implementado y validado localmente |
+| Ingresos y stock | Paso 10 publicado en PR #11; pendiente de integración |
 | Salidas, carrito y stock | Flujo funcional pendiente |
 | Auditoría completa e históricos autorizados | Pendientes |
 | Base personal del usuario | No se verificó ni migró; no asumir que está preparada |
@@ -1043,7 +1043,7 @@ El plan original se mantiene con los siguientes estados:
 | 9.3 | CRUD de clientes | Implementado e integrado en PR #8 |
 | 9.4 | CRUD de proveedores | Implementado e integrado en PR #9 |
 | 9.5 | CRUD de productos e imágenes | Implementado e integrado en PR #10 |
-| 10 | Flujo completo de ingresos y stock | Implementado y validado; publicación autorizada para revisión |
+| 10 | Flujo completo de ingresos y stock | Implementado y publicado en PR #11; pendiente de integración |
 | 11 | Flujo completo de salidas y stock | Próximo bloque; alcance por autorizar |
 | 12 | Validación integral y entrega | Pendiente |
 
@@ -1092,7 +1092,7 @@ la sección 5.3. Presentar alcance y obtener autorización antes de editar.
 
 ## 16 Historial de entregas
 
-Estado verificado al preparar esta versión: PR #1 al #10 integrados.
+Estado verificado al preparar esta versión: PR #1 al #10 integrados; PR #11 abierto.
 Los hashes de la columna Commit identifican el trabajo de cada rama.
 
 | Entrega | Rama | Commit | PR |
@@ -1107,12 +1107,13 @@ Los hashes de la columna Commit identifican el trabajo de cada rama.
 | Clientes | `codex/paso-9-3-clientes` | `e1a12b7` y `535e869` | [#8](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/8) |
 | Proveedores | `codex/paso-9-4-proveedores` | `ad4267a` y `2a43284` | [#9](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/9) |
 | Productos e imágenes y retiro de pruebas | `codex/paso-9-5-productos-imagenes` | `9929183` y `c5f20cc` | [#10](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/10) |
+| Ingresos y stock | `codex/paso-10-ingresos-stock` | `6f4150e` inicial | [#11 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/11) |
 
 El PR #10 ya está integrado mediante `ec5f3ef`, comprobado al iniciar el paso 10.
-El paso 10 se prepara para publicación en `codex/paso-10-ingresos-stock`, basada
-en `origin/main` con ese merge. El usuario autorizó el commit y la subida;
-registrar aquí el commit y el PR reales al confirmar su creación. El merge queda
-a cargo del usuario.
+El paso 10 se publicó en `codex/paso-10-ingresos-stock`, basada en `origin/main`
+con ese merge, mediante el commit inicial `6f4150e`. El PR #11 queda abierto para
+revisión; el merge sigue a cargo del usuario. Esta actualización del historial
+se publica como seguimiento documental en el mismo PR.
 
 ## 17 Fuentes originales y decisiones que las reemplazan
 
