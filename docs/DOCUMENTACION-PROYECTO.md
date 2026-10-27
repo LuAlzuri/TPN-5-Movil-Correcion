@@ -44,9 +44,9 @@ El PR #11 está integrado en main mediante `6e35de1`, verificado al iniciar el p
 Los resultados figuran en la sección 14.
 La unicidad de CUIT/CUIL entre clientes y entre proveedores tiene migraciones propias.
 
-Los PR del 1 al 12 están integrados en `main`, según las comprobaciones realizadas
-al iniciar el bloque 12.1. El último es el PR #12, integrado mediante
-`2775d66`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
+Los PR del 1 al 13 están integrados en `main`, según las comprobaciones realizadas
+al iniciar el bloque 12.2. El último es el PR #13, integrado mediante
+`7269ef6`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
 automáticamente por estar escrito aquí.
 
 El usuario autorizó el **paso 11, flujo completo de salidas y carrito**, incluida
@@ -57,10 +57,13 @@ El PR #12 fue integrado por el usuario mediante `2775d66`. No se aplicó
 la nueva migración a ninguna base.
 El bloque **12.1, completar y corregir Usuarios**, está autorizado, implementado
 y publicado en `codex/paso-12-1-usuarios` mediante el PR #13: 293 comprobaciones
-temporales aprobadas y compilación sin errores ni advertencias. El PR está abierto
-para revisión e integración por el usuario.
-Las consultas de auditoría e históricos y la validación integral en SQL Server
-continúan pendientes de sus propios alcances y autorizaciones.
+temporales aprobadas y compilación sin errores ni advertencias. El PR #13 está integrado mediante `7269ef6`.
+El usuario autorizó el bloque **12.2 de consultas administrativas de históricos y
+eliminados**. Está implementado y validado localmente en `codex/paso-12-2-auditoria`:
+494 comprobaciones temporales aprobadas, compilación sin errores ni advertencias
+y traducción a SQL Server comprobada sin conexión. No tiene commits ni PR. La
+validación funcional integral en SQL Server y la preparación de entrega siguen
+pendientes de su propio alcance y autorización.
 
 | Área | Estado vigente |
 | --- | --- |
@@ -75,8 +78,8 @@ continúan pendientes de sus propios alcances y autorizaciones.
 | Productos e imágenes | Paso 9.5 integrado en PR #10 |
 | Ingresos y stock | Paso 10 integrado en PR #11 |
 | Salidas, carrito y stock | Paso 11 integrado en PR #12 |
-| CRUD general de usuarios | Bloque 12.1 publicado en PR #13; pendiente de integración |
-| Auditoría completa e históricos autorizados | Pendientes |
+| CRUD general de usuarios | Bloque 12.1 integrado en PR #13 |
+| Consultas de históricos y eliminados | Bloque 12.2 implementado y validado localmente; sin publicar |
 | Base personal del usuario | No se verificó ni migró; no asumir que está preparada |
 
 POST /api/usuarios deja de devolver 501 en el bloque 12.1. Los tres tipos de cuenta
@@ -852,6 +855,89 @@ ProductoId, ClienteId y fechas se combinan con la propiedad obligatoria del clie
 Una página fuera del resultado es vacía. Se elimina el servicio provisional
 MovimientoService y su respuesta 501; SalidaService gestiona el flujo completo.
 
+### 11.7 Consultas de auditoría del bloque 12.2
+
+Solo Administrador puede acceder a estas rutas GET. Empleado y Cliente reciben
+403 y las peticiones sin JWT, 401. No hay escrituras, restauración ni borrado en
+este controlador. Se agregan AuditoriaController, AuditoriaDtos, AuditoriaService
+y su registro en Program; no cambian entidades, migraciones, dependencias ni los
+permisos y filtros de las rutas operativas.
+
+Cada recurso de esta lista tiene GET `/api/auditoria/{recurso}` paginado y GET
+`/api/auditoria/{recurso}/{id}` individual:
+
+| Recurso | Información y filtros específicos del listado |
+| --- | --- |
+| usuarios | Datos públicos de cuenta, rol, Eliminado y presencia de perfiles; busqueda y rol exacto Administrador/Empleado/Cliente |
+| empleados | Cuenta, FechaIngreso, Eliminado heredado de Usuario y PerfilConsistente; busqueda |
+| clientes | Cuenta, Telefono, Direccion, Eliminado heredado de Usuario y PerfilConsistente; busqueda |
+| categorias | Nombre, Descripcion, FechaCreacion y Eliminado; busqueda |
+| proveedores | Nombre, CUIT, contacto y Eliminado; busqueda |
+| productos | Datos del producto, stock actual, categoría con su estado e imagen actualmente asociada; busqueda y categoriaId |
+| ingresos | Resumen con proveedor, creador, confirmador, estados y fechas; proveedorId, productoId, confirmado, desde/hasta |
+| salidas | Resumen con cliente, confirmador, estados y fechas; clienteId, productoId, confirmarXCliente, confirmarXEmpleado, desde/hasta |
+
+Todos los listados admiten eliminado opcional: omitido incluye activos y eliminados,
+true solo eliminados, false solo activos. Este filtro se aplica al recurso raíz;
+un producto activo con categoría eliminada sigue activo y conserva esa referencia.
+En empleados/clientes se aplica a Usuario.Eliminado. Se muestran perfiles existentes
+incluso si son inconsistentes con el rol; PerfilConsistente los identifica sin
+corregir ni ocultar datos. No se incluyen Password ni PasswordHash en ninguna respuesta.
+
+Page debe ser positivo, pageSize estar entre 1 y 100, el desplazamiento caber en int
+y los IDs de filtro ser positivos. Busqueda admite hasta 300 caracteres, se recorta
+y si queda vacía no filtra. En cuentas/perfiles busca por nombre completo, email o
+CUIT; categorías/productos, por nombre o descripción; proveedores, nombre/CUIT/email.
+Rol y Tipo de movimiento se recortan, admiten vacío como ausencia y exigen los valores
+exactos documentados; los inválidos devuelven 400. Los booleanos, números y fechas
+mal formados también devuelven 400. Los rangos desde/hasta son inclusivos, coherentes
+y se aplican a Fecha de creación del encabezado, no a fechas de confirmación.
+
+Usuarios ordena por Email e Id; perfiles por Apellido, Nombre e Id; catálogos por
+Nombre e Id; ingresos/salidas por Fecha e Id descendentes. Una página fuera del
+resultado es vacía y un registro ausente devuelve 404. El detalle individual no
+se limita por el filtro de eliminación del listado.
+
+Los listados de ingresos/salidas devuelven resúmenes sin cargar sus detalles. La
+consulta individual devuelve Encabezado, Detalles y Total. Cada detalle conserva
+ID, producto con su estado actual, Cantidad, PrecioUnitario, DescAplicado y Subtotal.
+Los importes usan decimal y redondeo por detalle AwayFromZero a dos decimales,
+igual que los flujos operativos. Total suma subtotales ya redondeados. Proveedor,
+cliente, empleados y usuario confirmador se consultan aunque estén eliminados;
+los responsables muestran ID, nombre, apellido, rol actual y estado. En ingresos,
+Revertido deriva de Confirmado y Eliminado conforme al flujo autorizado del paso 10.
+
+GET `/api/auditoria/productos/{id}/movimientos` incluye productos activos o eliminados
+y los detalles conservados de ingresos/salidas en cualquier estado. Admite page,
+pageSize, eliminado (del encabezado), tipo Ingreso/Salida y desde/hasta. Ordena por
+Fecha descendente, Tipo, EncabezadoId y DetalleId, y pagina en SQL.
+
+| Campo de movimiento | Significado |
+| --- | --- |
+| EncabezadoId, DetalleId, ProductoId, Tipo | Identifican inequívocamente el detalle y su origen |
+| Fecha y FechaConfirmacion | Creación y confirmación operativa, si existe; no fecha de eliminación |
+| Eliminado y Estado | Ingreso: Borrador, Confirmado, BorradorEliminado o Revertido; Salida: Borrador, Solicitada, Confirmada o Eliminada |
+| Cantidad | Cantidad del comprobante con signo: ingreso positivo, salida negativa, también en borradores |
+| ImpactoStockVigente | Cantidad firmada solo si está confirmado operativamente y no eliminado; cero en el resto |
+| PrecioUnitario, DescAplicado, Subtotal | Valores conservados y subtotal positivo calculado sobre cantidad absoluta |
+| Contraparte | Proveedor o cliente y su estado actual de eliminación |
+
+ImpactoStockVigente expresa el aporte del comprobante según el estado almacenado y
+las reglas operativas; no es un saldo acumulado ni reconstruye existencias en una
+fecha pasada. Un ingreso revertido conserva cantidad/precio históricos, pero su
+aporte vigente es cero. No se crea otro movimiento ficticio de reversión ni se
+inventa su fecha. La confirmación y la eliminación siguen siendo operaciones de
+los flujos originales, sin ejecutarlas desde estas consultas.
+
+El modelo conserva el estado actual de registros y relaciones: nombres, contacto
+y roles pueden haber cambiado. PrecioUnitario y DescAplicado sí quedan capturados
+en detalles. No registra fecha/autor de cada borrado ni todas las versiones de cada
+campo; estas consultas no inventan esos datos. Un detalle de borrador eliminado
+físicamente o una imagen reemplazada no se puede recuperar por estas rutas. Los
+metadatos de imagen se muestran incluso con producto eliminado; no se leen archivos
+físicos ni se crean copias. Las URLs estáticas mantienen el comportamiento público
+ya documentado en el paso 9.5.
+
 ## 12 Entorno y configuración
 
 ### 12.1 Herramientas
@@ -1065,6 +1151,7 @@ ni debe interpretarse como una suite vigente.
 | Paso 10 | 242 comprobaciones temporales aprobadas; compilación sin errores ni advertencias | HTTP, fallos y concurrencia en SQLite aislada; adaptación del descuento para ese proveedor; sin validación funcional en SQL Server ni pruebas añadidas al repositorio |
 | Paso 11 | 361 comprobaciones temporales aprobadas; compilación sin errores ni advertencias; 14 migraciones y sin cambios pendientes de modelo | HTTP, fallos y concurrencia en SQLite aislada; SQL de migración generado/revisado sin ejecutarlo; sin validación funcional en SQL Server ni pruebas añadidas al repositorio |
 | Bloque 12.1 | 293 comprobaciones temporales aprobadas; compilación sin errores ni advertencias; sin cambios pendientes de modelo | HTTP y JWT reales, rollback y concurrencia en SQLite aislada; sin pruebas funcionales en SQL Server ni pruebas añadidas al repositorio |
+| Bloque 12.2 | 494 comprobaciones temporales aprobadas; compilación sin errores ni advertencias; traducción SQL Server sin conexión; sin cambios pendientes de modelo | HTTP con JWT real y datos SQLite aislados; sin pruebas funcionales en SQL Server ni pruebas añadidas al repositorio |
 
 Los números son totales de la suite en cada entrega, no cantidades acumulables.
 Durante el paso 8 se aplicaron las once migraciones iniciales a bases nuevas de
@@ -1199,6 +1286,45 @@ migraciones ni dependencias. No se conectó a bases personales ni se aplicaron
 migraciones. Las verificaciones temporales conservan la adaptación de descuentos
 SQLite descrita en el paso 11; no cambia el modelo de producción.
 
+En el bloque 12.2 se ejecutaron 494 comprobaciones temporales externas al repositorio,
+con JWT reales y archivos SQLite/webroot aislados. Se verificó la autorización de
+las diecisiete rutas GET, rechazo de escrituras en listados/detalles, campos y
+filtros inválidos, estados omitido/activo/eliminado, búsqueda recortada, orden y
+paginación estable, registros ausentes y resultados vacíos. Las comprobaciones
+usaron borrados de las API operativas antes de consultar los históricos.
+
+Los escenarios conservaron ingresos/salidas con proveedor, creador, confirmador,
+cliente, categoría, producto e imagen asociados a registros eliminados. Se probó
+confirmación por empleado y por un administrador eliminado y se consultó todo con
+un segundo administrador activo. Se verificaron precios capturados frente al
+precio actual del producto, descuentos, redondeo AwayFromZero, totales, resúmenes
+y detalles, imágenes opcionales, perfiles inconsistentes visibles y filtros de
+referencias/confirmación/fechas inclusive sobre encabezados eliminados.
+
+Se verificaron los ocho estados de los movimientos: cuatro de ingresos y cuatro
+de salidas; cantidades firmadas, subtotales positivos, impacto vigente cero de un
+ingreso revertido y aporte de una salida confirmada. Se combinaron filtros de
+tipo/estado/fechas y se probó paginación de la unión con fechas empatadas.
+Las consultas operativas mantuvieron sus 404 para eliminados. Un interceptor
+rechazaba cualquier escritura durante la auditoría y no registró ninguna; el
+stock permaneció idéntico y el contexto de consulta no siguió entidades. Ningún
+JSON expuso Password/PasswordHash ni la contraseña de prueba.
+
+Se comprobó adicionalmente ToQueryString del proveedor SQL Server, sin abrir
+conexiones: las ocho proyecciones reales de resúmenes/catálogos, y la unión de
+movimientos extraída del método para el verificador temporal, con filtros y
+paginación. Se generó UNION ALL con OFFSET/FETCH, sin perder relaciones eliminadas
+ni seleccionar PasswordHash. Esta comprobación de traducción no sustituye una
+prueba funcional de consultas, tipos o concurrencia en SQL Server.
+
+La solución compiló con 0 errores y 0 advertencias. tools/Schema confirmó once
+entidades, catorce migraciones y restricciones conservadas; dotnet-ef 9.0.11 confirmó
+que no hay cambios pendientes de modelo. No se crearon/aplicaron migraciones, no
+se conectó a bases personales y no se incorporaron pruebas al repositorio.
+Se reutilizó la adaptación temporal de descuentos SQLite de los bloques anteriores,
+sin modificar la representación decimal del modelo de producción ni ejecutar de
+nuevo sus suites completas. La validación integral de SQL Server queda para 12.3.
+
 ## 15 Plan de trabajo y alcance por autorizar
 
 El plan original se mantiene con los siguientes estados:
@@ -1222,8 +1348,8 @@ El plan original se mantiene con los siguientes estados:
 | 10 | Flujo completo de ingresos y stock | Integrado en PR #11 |
 | 11 | Flujo completo de salidas y stock | Integrado en PR #12 |
 | 12 | Validación integral y entrega | En curso por bloques; no completado |
-| 12.1 | Completar y corregir Usuarios | Publicado en PR #13; pendiente de integración |
-| 12.2 propuesto | Consultas administrativas de históricos y eliminados | Pendiente de alcance y autorización |
+| 12.1 | Completar y corregir Usuarios | Integrado en PR #13 |
+| 12.2 | Consultas administrativas de históricos y eliminados | Implementado y validado localmente; sin publicar |
 | 12.3 propuesto | Validación integral en SQL Server y preparación de entrega | Pendiente de alcance y autorización |
 
 Los pasos 2 al 6 se revisaron después sin duplicar entidades ni migraciones. Que
@@ -1287,9 +1413,22 @@ la subida de la rama y la entrega para revisión mediante PR. El merge queda a s
 cargo; no se autorizan migraciones ni cambios en bases personales. Auditoría e históricos y validación integral son bloques
 posteriores que requieren su propio alcance aprobado.
 
+El usuario autorizó el bloque 12.2 después de revisar su alcance: rutas GET
+exclusivas de Administrador para listados/detalles de los ocho recursos, filtros
+de estado y referencias/fechas, detalles e importes de ingresos/salidas, movimientos
+de productos eliminados e imagen actualmente asociada. Se incluyen todas las
+relaciones conservadas sin perder registros por filtros globales. Se explicó el
+límite del modelo respecto de fecha/autor de borrado y versiones anteriores.
+La autorización cubre implementación local de AuditoriaController, AuditoriaDtos,
+AuditoriaService, registro en Program y este documento, con comprobaciones temporales
+fuera del repositorio. Posteriormente el usuario autorizó el commit, la subida
+de la rama y la entrega para revisión mediante PR. El merge queda a su cargo; no
+se autoriza aplicar migraciones ni modificar bases personales. No se introducen
+escrituras de auditoría.
+
 ## 16 Historial de entregas
 
-Estado verificado al publicar el bloque 12.1: PR #1 al #12 integrados; PR #13 abierto.
+Estado verificado al iniciar el bloque 12.2: PR #1 al #13 integrados; bloque 12.2 local sin publicar.
 Los hashes de la columna Commit identifican el trabajo de cada rama.
 
 | Entrega | Rama | Commit | PR |
@@ -1306,7 +1445,7 @@ Los hashes de la columna Commit identifican el trabajo de cada rama.
 | Productos e imágenes y retiro de pruebas | `codex/paso-9-5-productos-imagenes` | `9929183` y `c5f20cc` | [#10](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/10) |
 | Ingresos y stock | `codex/paso-10-ingresos-stock` | `6f4150e` y `016d5db` | [#11 integrado](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/11) |
 | Salidas, carrito y stock | `codex/paso-11-salidas-stock` | `e078981` inicial | [#12 integrado](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/12) |
-| Usuarios | `codex/paso-12-1-usuarios` | `2783113` inicial | [#13 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/13) |
+| Usuarios | `codex/paso-12-1-usuarios` | `2783113` inicial | [#13 integrado](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/13) |
 
 El PR #10 ya está integrado mediante `ec5f3ef`, comprobado al iniciar el paso 10.
 El paso 10 se publicó en `codex/paso-10-ingresos-stock`, basada en `origin/main`
@@ -1317,7 +1456,9 @@ rama como seguimiento de la entrega. El usuario integró el PR #12 mediante
 `2775d66`, verificado al iniciar el bloque 12.1. La rama local de ese bloque parte
 de ese main actualizado. El bloque 12.1 se publicó con el commit inicial `2783113`
 mediante el PR #13. Esta actualización documental se publica como seguimiento en
-la misma rama. El merge queda a cargo del usuario.
+la misma rama. El usuario integró el PR #13 mediante `7269ef6`, comprobado al
+iniciar el bloque 12.2. Este bloque parte de ese main actualizado y todavía no
+tiene commits ni PR.
 
 ## 17 Fuentes originales y decisiones que las reemplazan
 
