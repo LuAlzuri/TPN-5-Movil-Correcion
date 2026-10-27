@@ -70,6 +70,36 @@ public class AuthService(AppDbContext db, JwtSettings jwt)
         return ToDto(usuario);
     }
 
+    public async Task EliminarUsuarioAsync(int id, int administradorId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // Serializable protects both the active-administrator predicate and deletion.
+            // Concurrent deletions may conflict, but must never leave no usable administrator.
+            await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+            var administradores = db.Usuarios.AsNoTracking().Where(u => u.Rol == Usuario.RolAdministrador
+                && u.Empleado == null && u.Cliente == null);
+            if (!await administradores.AnyAsync(u => u.Id == administradorId, cancellationToken))
+                throw new ApiException("Se requiere un administrador activo y consistente.", StatusCodes.Status403Forbidden);
+
+            var usuario = await db.Usuarios.AsNoTracking().SingleOrDefaultAsync(u => u.Id == id, cancellationToken)
+                ?? throw new ApiException("El usuario no existe.", StatusCodes.Status404NotFound);
+            if (usuario.Rol == Usuario.RolAdministrador &&
+                !await administradores.AnyAsync(u => u.Id != id, cancellationToken))
+                throw new ApiException("Debe existir al menos un administrador activo.", StatusCodes.Status409Conflict);
+
+            var affected = await db.Usuarios.Where(u => u.Id == id)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.Eliminado, true), cancellationToken);
+            if (affected != 1)
+                throw new ApiException("La cuenta cambió durante la operación; vuelva a intentarla.", StatusCodes.Status409Conflict);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ConflictosSql.EsConcurrencia(ex))
+        {
+            throw new ApiException("La operación coincidió con otra modificación; vuelva a intentarla.", StatusCodes.Status409Conflict);
+        }
+    }
+
     // Explicit CLI operation only; never called automatically during API startup.
     public async Task<UsuarioDto> CrearAdministradorInicialAsync(RegisterRequest request, CancellationToken cancellationToken = default)
     {
