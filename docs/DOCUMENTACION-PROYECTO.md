@@ -2018,6 +2018,69 @@ personales. `git diff --check` sin errores. Publicación en rama autorizada
 posteriormente para revisión antes del merge.
 
 
+### 15.6 Plan mínimo para completar la consigna y log de errores
+
+Después de la revisión del servicio PDF adjunto, el usuario autorizó publicar el
+README general y avanzar con el nuevo plan. README registrado en commit `0823421`,
+rama docs/readme-general y PR #24, pendiente de merge por el usuario al iniciar
+este bloque. El trabajo de errores parte de ese commit en `mejoras/log-errores`;
+el usuario autorizó posteriormente su commit y publicación en rama para revisión
+mediante PR. El merge queda a su cargo.
+
+Orden acordado: (1) log persistente de errores; (2) pago simulado;
+(3) reportes PDF de stock, ingresos y salidas,
+adaptando QuestPDF al modelo propio; (4) envío SMTP del PDF; (5) evaluar si la
+consigna exige auditoría de acciones además de las consultas históricas actuales.
+La implementación de los bloques posteriores requiere explicar y autorizar su
+alcance. No se implementan registro público ni cambio de roles.
+
+El primer bloque agrega Serilog.Extensions.Logging 9.0.0 y Serilog.Sinks.File 7.0.0
+como proveedor de ILogger, sin reemplazar el logger global estático. Cada host
+administra y dispone su propio proveedor. Se registran eventos Error o superiores
+en JSON por línea: fecha, excepción y, en el error centralizado de la API, método,
+ruta sin query string, ID del usuario autenticado cuando existe e identificador
+de petición. No se registran cuerpos ni cabeceras de peticiones ni se habilita
+sensitive-data logging de EF. Las validaciones de negocio conservan sus respuestas
+400/409 y no se convierten en errores inesperados.
+
+Configuración opcional: ErrorLog__Path, por defecto logs/errores-.log bajo la raíz
+de contenido de la API, fuera de wwwroot. Rotación diaria y al alcanzar 10 MiB,
+reteniendo siete archivos. La cuenta del proceso necesita permisos de escritura;
+en despliegue elegir una ruta persistente fuera de la carpeta pública. La carpeta
+logs se excluye de Git y de los archivos de publicación. No subir registros a Git.
+
+El catch central sustituye Console.WriteLine de desarrollo por ILogger.LogError,
+conservando exactamente el estado 500 y el JSON genérico de respuesta. No se
+agregan endpoints, tablas, migraciones ni lógica de stock o identidad. No es un
+registro de auditoría de cada operación: ese requisito se evalúa por separado.
+
+La prueba nueva provoca un fallo SQL en una base propia y verifica persistencia,
+contexto del evento, ausencia de la contraseña y token de prueba en los archivos,
+respuesta HTTP genérica y que el archivo no se sirva por una URL /logs. Los logs
+se guardan fuera de la raíz web temporal y se limpian con los demás recursos de
+pruebas. No se modifican ni se utilizan bases personales.
+
+Verificación final: `dotnet test --nologo` compiló sin advertencias y aprobó los
+36 casos (21 de integración y 15 unitarios), cero fallidos y cero omitidos. La
+prueba inicial detectó que el archivo no se escribía con la apertura compartida;
+se adoptó escritura por proceso y se dejó el registro antes de enviar el 500.
+La prueba distingue el evento central de los eventos internos de EF para validar
+sus campos; no se eliminó la comprobación del archivo ni la de credenciales.
+La batería completa se repitió y pasó. Para varias instancias, configurar rutas
+separadas. La consulta de paquetes vulnerables, incluidas transitivas, no reportó
+vulnerabilidades en las fuentes NuGet consultadas. `git diff --check` sin errores.
+El siguiente bloque es el pago simulado. El usuario propuso revisar el diseño:
+abrir una simulación solo del front desde el carrito y llamar a la confirmación
+del Cliente únicamente al aceptar ese pago ficticio. Esto permite reutilizar
+confirmarXCliente y POST /api/salidas/{id}/confirmar-cliente, sin campos nuevos,
+endpoints ni migración. Mientras no se complete esa llamada, el pedido sigue en
+borrador; la aceptación del personal y el descuento de stock mantienen su flujo.
+Es una propuesta de interacción, no prueba de cobro real ni una implementación
+del frontend. Los cambios de pago no se incluyen en esta entrega. El log de
+errores tiene commit y publicación autorizados; el README general ya fue publicado
+mediante PR #24.
+
+
 El plan original se mantiene con los siguientes estados:
 
 | Paso | Trabajo | Estado |

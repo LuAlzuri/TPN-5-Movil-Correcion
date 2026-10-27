@@ -1,3 +1,6 @@
+using Serilog;
+using Serilog.Extensions.Logging;
+using Serilog.Formatting.Json;
 using System.Globalization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -13,6 +16,21 @@ using TPN_5_MOVIL.Entities;
 
 var bootstrapMode = args.Contains("--crear-administrador", StringComparer.Ordinal);
 var builder = WebApplication.CreateBuilder(args.Where(a => a != "--crear-administrador").ToArray());
+
+// Resolve configuration when the host is built, including test-host overrides.
+builder.Services.AddSingleton<ILoggerProvider>(services =>
+{
+    var config = services.GetRequiredService<IConfiguration>();
+    var environment = services.GetRequiredService<IWebHostEnvironment>();
+    var path = Path.Combine(environment.ContentRootPath,
+        config["ErrorLog:Path"] ?? "logs/errores-.log");
+    var logger = new LoggerConfiguration().MinimumLevel.Error()
+        .WriteTo.File(new JsonFormatter(renderMessage: true), path,
+            rollingInterval: RollingInterval.Day, fileSizeLimitBytes: 10 * 1024 * 1024,
+            rollOnFileSizeLimit: true, retainedFileCountLimit: 7)
+        .CreateLogger();
+    return new SerilogLoggerProvider(logger, dispose: true);
+});
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -199,12 +217,13 @@ app.Use(async (context, next) =>
     }
     catch (Exception ex)
     {
+        app.Logger.LogError(ex,
+            "Error no controlado en {Method} {Path}. Usuario {UsuarioId}. Solicitud {TraceId}",
+            context.Request.Method, context.Request.Path.Value,
+            context.User.FindFirst("sub")?.Value, context.TraceIdentifier);
         context.Response.StatusCode = StatusCodes.Status500InternalServerError;
         context.Response.ContentType = "application/json";
         await context.Response.WriteAsJsonAsync(new { error = "Error interno del servidor." });
-
-        if (app.Environment.IsDevelopment())
-            Console.WriteLine(ex);
     }
 });
 

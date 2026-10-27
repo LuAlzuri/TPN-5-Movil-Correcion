@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TPN_5_MOVIL.DTOs;
 using TPN_5_MOVIL.Entities;
@@ -18,6 +19,34 @@ public sealed class ActualizacionUsuariosTests(SqlServerFixture sql)
 
     private static Task<UsuarioDto> UsuarioAsync(TestApplication app, int id) =>
         app.JsonAsync<UsuarioDto>(HttpMethod.Get, $"/api/usuarios/{id}", app.Admin);
+
+    [Fact]
+    public async Task Error_inesperado_se_registra_sin_exponer_credenciales_ni_archivos()
+    {
+        await using var app = await sql.CreateApplicationAsync();
+        await app.LoginAdminAsync();
+        await app.DatabaseAsync(db => db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE Clientes ADD CONSTRAINT CK_TestErrorLog CHECK (Id < 0);"));
+        using var response = await app.SendAsync(HttpMethod.Post, "/api/auth/register", app.Admin,
+            new { nombre = "Cliente", apellido = "Log", cuit = "123", email = "log@example.test", password = app.Password, rol = "Cliente" });
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Error interno del servidor.", error.GetProperty("error").GetString());
+        var files = Directory.GetFiles(app.Logs, "*.log");
+        Assert.NotEmpty(files);
+        var content = string.Join("\n", files.Select(File.ReadAllText));
+        Assert.DoesNotContain(app.Password, content);
+        Assert.DoesNotContain(app.Admin.Token, content);
+        using var entry = content.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => JsonDocument.Parse(line)).First(d => d.RootElement.GetProperty("Properties").TryGetProperty("Method", out _));
+        var properties = entry.RootElement.GetProperty("Properties");
+        Assert.Equal("POST", properties.GetProperty("Method").GetString());
+        Assert.Equal("/api/auth/register", properties.GetProperty("Path").GetString());
+        Assert.Equal(app.Admin.Id.ToString(), properties.GetProperty("UsuarioId").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(properties.GetProperty("TraceId").GetString()));
+        Assert.Contains("SqlException", entry.RootElement.GetProperty("Exception").GetString());
+        await app.StatusAsync(HttpMethod.Get, "/logs/" + Path.GetFileName(files[0]), HttpStatusCode.NotFound);
+    }
 
     [Fact]
     public async Task Edicion_propia_normaliza_y_conserva_unicidad_y_rechazo_de_campos_ajenos()

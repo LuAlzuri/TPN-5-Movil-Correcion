@@ -13,6 +13,8 @@
     <EmbeddedResource Remove="wwwroot\upload\**" />
     <None Remove="wwwroot\upload\**" />
     <Content Remove="wwwroot\uploads\**" />
+    <Content Remove="logs\**" />
+    <None Remove="logs\**" />
     <None Remove="wwwroot\uploads\**" />
   </ItemGroup>
 
@@ -28,6 +30,8 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Serilog.Extensions.Logging" Version="9.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="7.3.1" />
     <PackageReference Include="SkiaSharp" Version="4.153.1" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.1"
