@@ -32,15 +32,26 @@ API: `TPN°5-Movil`, ASP.NET Core con .NET 9, EF Core 9 y SQL Server.
 
 ## 1 Estado actual y próximo bloque
 
+**Mejoras posteriores — bloque 1:** implementado localmente en
+`mejoras/proteger-ultimo-administrador`, desde main `1c2761d` (PR #15 integrado).
+El usuario autorizó proteger al último Administrador activo sin cambiar el bootstrap
+ni impedir la autoeliminación cuando queda otro Administrador válido. El controlador
+delega ahora en AuthService, con revalidación del actor y transacción Serializable.
+Resultado: 186 comprobaciones temporales aprobadas en SQL Server, cero fallidas,
+incluidas quince carreras de eliminación. No se incorporaron pruebas al repositorio.
+No hay cambios de esquema ni migración nueva. Después de validar el bloque, el
+usuario autorizó registrar y subir esta entrega por rama para revisión previa al
+merge, que queda a su cargo. El siguiente bloque de implementación es limitar intentos de
+login, con su propio alcance y autorización. Consultar sección 14.4.
+
 **Actualización del bloque 12.3 (27 de octubre de 2026):** se completó la validación
 funcional en SQL Server 2022/Linux desde `dc37184` y se corrigieron dos diferencias
 reales: el carrito ahora limita la cantidad a stock y acepta cero como retiro de
 línea; los deadlocks/lock timeouts envueltos por EF Core se traducen a 409.
-La rama de entrega es `validacion/paso-12-3`. Después de la validación, el usuario
-autorizó el commit y la subida de esta entrega para revisión antes de integrar en
-main. El merge queda a su cargo; no se autoriza modificar bases personales.
+El bloque 12.3 se entregó en `validacion/paso-12-3`, commit `54867bc`, y el usuario
+integró el PR #15 en main mediante `1c2761d`. No se modificaron bases personales.
 
-Resultado final: 454 comprobaciones funcionales aprobadas, cero fallidas, en doce
+Resultado al cierre del bloque 12.3: 454 comprobaciones funcionales aprobadas, cero fallidas, en doce
 escenarios, más siete comprobaciones de actualización de migraciones aprobadas.
 Las pruebas se ejecutaron fuera del repositorio contra bases y almacenamiento
 exclusivos de una instancia SQL Server descartable. No se modificó ninguna base
@@ -578,10 +589,16 @@ SQL Server de claves únicas 2601/2627 siguen traduciéndose a 409.
 DELETE devuelve 204 y marca Usuario.Eliminado: conserva perfiles y referencias
 históricas, revoca el JWT de la cuenta y no restaura ni borra físicamente datos.
 Una cuenta ausente o eliminada devuelve 404 al consultar, editar o eliminar de nuevo.
-No se incorpora una regla nueva sobre eliminación propia o del último administrador.
-No se agrega auditoría, cambios de rol, restauración, tablas, índices ni migraciones.
-Solo cambian UsuariosController, UsuarioDtos y esta documentación; AuthService,
-las entidades y el helper compartido de paginación mantienen su implementación.
+El bloque posterior de protección del último Administrador agrega una condición:
+si el objetivo es Administrador, debe quedar otro Administrador activo y con perfil
+consistente (sin subperfil Cliente/Empleado). Si no queda, responde 409 sin cambios.
+La autoeliminación sigue permitida cuando queda ese respaldo. El actor se obtiene
+del JWT y se revalida dentro de la misma transacción Serializable. Actores que ya
+no están activos o son inconsistentes se rechazan con 403; un token eliminado se
+rechaza normalmente antes, con 401. Los conflictos 1205/1222, incluso envueltos por
+EF Core, responden 409 sin reintentos automáticos. No cambia el bootstrap, roles,
+restauración, perfiles, tablas, índices ni migraciones. UsuariosController delega
+la eliminación en AuthService; el resto de contratos conserva su implementación.
 
 ### 11.3 Proveedores implementados
 
@@ -1416,7 +1433,48 @@ No usar el modo bootstrap ni database update automáticamente al arrancar la API
 El carrito no reserva stock: una venta ajena puede invalidar un carrito existente,
 por lo que solicitar y confirmar deben volver a comprobar disponibilidad.
 
+### 14.4 Protección del último Administrador — mejoras, bloque 1
+
+Alcance autorizado: UsuariosController, AuthService y esta documentación. La
+eliminación se ejecuta dentro de una transacción Serializable y considera únicamente
+Administradores activos con perfil consistente como respaldo. No agrega una
+prohibición general de autoeliminación. No cambia CrearAdministradorInicialAsync:
+sigue contando administradores eliminados al impedir un segundo bootstrap.
+
+Se ejecutaron 186 comprobaciones temporales fuera del repositorio, con JWT de login
+real, una API local y una base SQL Server 2022 descartable. Todas aprobaron, sin
+omisiones. Se verificó:
+
+- Un único Administrador no puede eliminarse (409), conserva cuenta y token.
+- Otro Administrador puede eliminarse o autoeliminarse cuando queda uno activo.
+- Empleados/Clientes y administradores eliminados o con perfil inconsistente no
+  cuentan como respaldo utilizable.
+- Los roles no administrativos no pueden usar DELETE de Usuarios y los anónimos
+  reciben 401. El borrado de Empleados/Clientes conserva perfiles y revoca tokens.
+- Repetir DELETE o editar un objetivo eliminado devuelve 404; no existe borrado físico.
+- Seis rondas de autoeliminaciones simultáneas, seis de eliminaciones cruzadas y
+  tres contra un mismo objetivo. En cada carrera ganó una operación con 204 y la
+  otra respondió 409; nunca quedó el sistema sin Administrador activo.
+- La auditoría conserva los administradores eliminados. Las catorce migraciones
+  existentes permanecen sin cambios.
+
+Compilación sin errores ni advertencias. EF Core comprobó que el modelo y snapshot
+siguen coincidiendo. Se aplicó el esquema únicamente a la base descartable para
+probar el código; no se creó una migración nueva ni se tocó una base personal.
+La instancia descartable y la API de prueba se detuvieron al finalizar. La suite
+versionada retirada no se reintrodujo ni se reejecutó toda la batería de 12.3.
+
 ## 15 Plan de trabajo y alcance por autorizar
+Plan de mejoras acordado después del informe de revisión:
+
+| Bloque | Alcance | Estado |
+| --- | --- | --- |
+| 1 | Proteger al último Administrador activo | Implementado y validado; entrega por rama autorizada para revisión |
+| 2 | Limitar intentos de login | Pendiente de alcance y autorización |
+| 3 | Acordar una batería pequeña de pruebas reproducibles | Pendiente; no reintroducir pruebas versionadas por suposición |
+| 4 | Simplificar paginado, normalización y grupos de permisos | Pendiente, conservando contratos y matriz de autorización |
+| Resto | Otras recomendaciones del informe | Postergadas hasta finalizar los cuatro bloques |
+
 
 El plan original se mantiene con los siguientes estados:
 
@@ -1438,10 +1496,10 @@ El plan original se mantiene con los siguientes estados:
 | 9.5 | CRUD de productos e imágenes | Implementado e integrado en PR #10 |
 | 10 | Flujo completo de ingresos y stock | Integrado en PR #11 |
 | 11 | Flujo completo de salidas y stock | Integrado en PR #12 |
-| 12 | Validación integral y entrega | Validación completada; entrega del bloque 12.3 pendiente de revisión |
+| 12 | Validación integral y entrega | Completado e integrado en PR #15 |
 | 12.1 | Completar y corregir Usuarios | Integrado en PR #13 |
 | 12.2 | Consultas administrativas de históricos y eliminados | Integrado en PR #14 |
-| 12.3 | Validación integral en SQL Server y preparación de entrega | Validado; entrega por rama autorizada para revisión previa al merge |
+| 12.3 | Validación integral en SQL Server y preparación de entrega | Integrado en PR #15 |
 
 Los pasos 2 al 6 se revisaron después sin duplicar entidades ni migraciones. Que
 el modelo exista no significa que sus flujos funcionales estén terminados.

@@ -8,6 +8,7 @@ using TPN_5_MOVIL.DTOs;
 using TPN_5_MOVIL.Entities;
 using TPN_5_MOVIL.Exceptions;
 using TPN_5_MOVIL.Services;
+using TPN_5_MOVIL.Security;
 
 namespace TPN_5_MOVIL.Controllers;
 
@@ -114,14 +115,9 @@ public class UsuariosController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
-        var usuario = await _db.Usuarios.FindAsync(id);
-        if (usuario is null)
-            return NotFound();
-
-        usuario.Eliminado = true;
-        await _db.SaveChangesAsync();
+        await _auth.EliminarUsuarioAsync(id, User.ObtenerUsuarioId(), cancellationToken);
         return NoContent();
     }
 
