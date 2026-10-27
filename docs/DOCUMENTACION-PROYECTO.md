@@ -56,8 +56,9 @@ Está publicado en `codex/paso-11-salidas-stock` mediante el PR #12 y validado m
 El PR #12 fue integrado por el usuario mediante `2775d66`. No se aplicó
 la nueva migración a ninguna base.
 El bloque **12.1, completar y corregir Usuarios**, está autorizado, implementado
-y validado localmente en `codex/paso-12-1-usuarios`: 293 comprobaciones temporales
-aprobadas y compilación sin errores ni advertencias. No tiene commits ni PR.
+y publicado en `codex/paso-12-1-usuarios` mediante el PR #13: 293 comprobaciones
+temporales aprobadas y compilación sin errores ni advertencias. El PR está abierto
+para revisión e integración por el usuario.
 Las consultas de auditoría e históricos y la validación integral en SQL Server
 continúan pendientes de sus propios alcances y autorizaciones.
 
@@ -74,7 +75,7 @@ continúan pendientes de sus propios alcances y autorizaciones.
 | Productos e imágenes | Paso 9.5 integrado en PR #10 |
 | Ingresos y stock | Paso 10 integrado en PR #11 |
 | Salidas, carrito y stock | Paso 11 integrado en PR #12 |
-| CRUD general de usuarios | Bloque 12.1 implementado y validado localmente; sin publicar |
+| CRUD general de usuarios | Bloque 12.1 publicado en PR #13; pendiente de integración |
 | Auditoría completa e históricos autorizados | Pendientes |
 | Base personal del usuario | No se verificó ni migró; no asumir que está preparada |
 
@@ -1221,7 +1222,7 @@ El plan original se mantiene con los siguientes estados:
 | 10 | Flujo completo de ingresos y stock | Integrado en PR #11 |
 | 11 | Flujo completo de salidas y stock | Integrado en PR #12 |
 | 12 | Validación integral y entrega | En curso por bloques; no completado |
-| 12.1 | Completar y corregir Usuarios | Implementado y validado localmente; sin publicar |
+| 12.1 | Completar y corregir Usuarios | Publicado en PR #13; pendiente de integración |
 | 12.2 propuesto | Consultas administrativas de históricos y eliminados | Pendiente de alcance y autorización |
 | 12.3 propuesto | Validación integral en SQL Server y preparación de entrega | Pendiente de alcance y autorización |
 
@@ -1288,7 +1289,7 @@ posteriores que requieren su propio alcance aprobado.
 
 ## 16 Historial de entregas
 
-Estado verificado al iniciar el bloque 12.1: PR #1 al #12 integrados; bloque 12.1 local sin publicar.
+Estado verificado al publicar el bloque 12.1: PR #1 al #12 integrados; PR #13 abierto.
 Los hashes de la columna Commit identifican el trabajo de cada rama.
 
 | Entrega | Rama | Commit | PR |
@@ -1305,6 +1306,7 @@ Los hashes de la columna Commit identifican el trabajo de cada rama.
 | Productos e imágenes y retiro de pruebas | `codex/paso-9-5-productos-imagenes` | `9929183` y `c5f20cc` | [#10](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/10) |
 | Ingresos y stock | `codex/paso-10-ingresos-stock` | `6f4150e` y `016d5db` | [#11 integrado](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/11) |
 | Salidas, carrito y stock | `codex/paso-11-salidas-stock` | `e078981` inicial | [#12 integrado](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/12) |
+| Usuarios | `codex/paso-12-1-usuarios` | `2783113` inicial | [#13 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/13) |
 
 El PR #10 ya está integrado mediante `ec5f3ef`, comprobado al iniciar el paso 10.
 El paso 10 se publicó en `codex/paso-10-ingresos-stock`, basada en `origin/main`
@@ -1313,7 +1315,9 @@ local `codex/paso-11-salidas-stock`. El paso 11 se publicó con el commit inicia
 `e078981` mediante el PR #12. Esta actualización documental se publica en la misma
 rama como seguimiento de la entrega. El usuario integró el PR #12 mediante
 `2775d66`, verificado al iniciar el bloque 12.1. La rama local de ese bloque parte
-de ese main actualizado y todavía no tiene commits ni PR.
+de ese main actualizado. El bloque 12.1 se publicó con el commit inicial `2783113`
+mediante el PR #13. Esta actualización documental se publica como seguimiento en
+la misma rama. El merge queda a cargo del usuario.
 
 ## 17 Fuentes originales y decisiones que las reemplazan
 
