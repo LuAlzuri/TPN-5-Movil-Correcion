@@ -17,6 +17,10 @@ public class EmpleadosController(AppDbContext db, AuthService auth) : Controller
     private IQueryable<Empleado> EmpleadosValidos => db.Empleados
         .Where(e => e.Usuario.Rol == Usuario.RolEmpleado && e.Usuario.Cliente == null);
 
+    private static IQueryable<EmpleadoResponse> Respuestas(IQueryable<Empleado> query) =>
+        query.Select(e => new EmpleadoResponse(e.Id, e.Usuario.Nombre, e.Usuario.Apellido,
+            e.Usuario.CUIT, e.Usuario.Email, e.FechaIngreso));
+
     [HttpGet]
     public async Task<ActionResult<PaginatedResult<EmpleadoResponse>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 10,
@@ -31,17 +35,15 @@ public class EmpleadosController(AppDbContext db, AuthService auth) : Controller
                 || e.Usuario.Email.Contains(busqueda) || e.Usuario.CUIT.Contains(busqueda));
 
         return Ok(await PaginatedResult<EmpleadoResponse>.CreateAsync(
-            query.OrderBy(e => e.Usuario.Apellido).ThenBy(e => e.Usuario.Nombre).ThenBy(e => e.Id)
-                .Select(e => new EmpleadoResponse(e.Id, e.Usuario.Nombre, e.Usuario.Apellido,
-                    e.Usuario.CUIT, e.Usuario.Email, e.FechaIngreso)), page, pageSize));
+            Respuestas(query.OrderBy(e => e.Usuario.Apellido).ThenBy(e => e.Usuario.Nombre).ThenBy(e => e.Id)),
+            page, pageSize));
     }
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<EmpleadoResponse>> GetById(int id)
     {
-        var response = await EmpleadosValidos.AsNoTracking().Where(e => e.Id == id)
-            .Select(e => new EmpleadoResponse(e.Id, e.Usuario.Nombre, e.Usuario.Apellido,
-                e.Usuario.CUIT, e.Usuario.Email, e.FechaIngreso)).FirstOrDefaultAsync();
+        var response = await Respuestas(EmpleadosValidos.AsNoTracking().Where(e => e.Id == id))
+            .FirstOrDefaultAsync();
         return response is null ? NotFound() : Ok(response);
     }
 

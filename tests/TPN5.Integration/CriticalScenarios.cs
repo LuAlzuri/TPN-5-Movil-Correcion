@@ -119,6 +119,9 @@ public sealed class CriticalScenarios(SqlServerFixture sql)
         var editedEmployee = await app.JsonAsync<EmpleadoResponse>(HttpMethod.Get, $"/api/empleados/{employee.Id}", app.Admin);
         Assert.Equal("employee.edited@example.test", editedEmployee.Email);
         Assert.Equal("Empleado", editedEmployee.Nombre);
+        var employeeList = await app.JsonAsync<PaginatedResult<EmpleadoResponse>>(HttpMethod.Get,
+            "/api/empleados?busqueda=EMPLOYEE.EDITED", app.Admin);
+        Assert.Equal(editedEmployee, Assert.Single(employeeList.Items));
         Assert.Equal(employee.Id, (await app.LoginAsync("EMPLOYEE.EDITED@EXAMPLE.TEST")).Id);
 
     }
@@ -173,9 +176,39 @@ public sealed class CriticalScenarios(SqlServerFixture sql)
         Assert.Equal(3, first.TotalCount);
         Assert.Equal(first.Items[0].Id, repeat.Items[0].Id);
         Assert.NotEqual(first.Items[0].Id, next.Items[0].Id);
-        foreach (var path in new[] { "usuarios", "clientes", "empleados", "categorias", "proveedores", "productos", "ingresos", "salidas", "auditoria/usuarios" })
+        foreach (var path in new[] { "usuarios", "clientes", "empleados", "categorias", "proveedores", "productos", "productos/1/movimientos", "ingresos", "salidas", "auditoria/usuarios" })
             foreach (var query in new[] { "page=0", "pageSize=101", "page=2147483647&pageSize=100" })
                 await app.StatusAsync(HttpMethod.Get, $"/api/{path}?{query}", HttpStatusCode.BadRequest, app.Admin);
+    }
+
+    [Fact]
+    public async Task Producto_activo_conserva_categoria_eliminada_y_descripcion_normalizada()
+    {
+        await using var app = await sql.CreateApplicationAsync();
+        await app.LoginAdminAsync();
+        var category = await app.JsonAsync<CategoriaResponse>(HttpMethod.Post, "/api/categorias", app.Admin,
+            new { nombre = "Categoria historica" }, HttpStatusCode.Created);
+        var product = await app.JsonAsync<ProductoResponse>(HttpMethod.Post, "/api/productos", app.Admin,
+            new { nombre = "Producto historico", descripcion = "   ", precio = 12.35m, categoriaId = category.Id },
+            HttpStatusCode.Created);
+        Assert.Null(product.Descripcion);
+        await app.StatusAsync(HttpMethod.Put, $"/api/productos/{product.Id}", HttpStatusCode.NoContent, app.Admin,
+            new { nombre = product.Nombre, descripcion = " Detalle ", precio = product.Precio, categoriaId = category.Id });
+        var before = await app.JsonAsync<ProductoResponse>(HttpMethod.Get, $"/api/productos/{product.Id}", app.Admin);
+        Assert.Equal("Detalle", before.Descripcion);
+        await app.StatusAsync(HttpMethod.Put, $"/api/productos/{product.Id}", HttpStatusCode.NoContent, app.Admin,
+            new { nombre = product.Nombre, descripcion = "   ", precio = product.Precio, categoriaId = category.Id });
+        var expected = before with { Descripcion = null };
+        Assert.Equal(expected, await app.JsonAsync<ProductoResponse>(HttpMethod.Get, $"/api/productos/{product.Id}", app.Admin));
+        await app.StatusAsync(HttpMethod.Delete, $"/api/categorias/{category.Id}", HttpStatusCode.NoContent, app.Admin);
+        await app.StatusAsync(HttpMethod.Get, $"/api/categorias/{category.Id}", HttpStatusCode.NotFound, app.Admin);
+        var detail = await app.JsonAsync<ProductoResponse>(HttpMethod.Get, $"/api/productos/{product.Id}", app.Admin);
+        var list = await app.JsonAsync<PaginatedResult<ProductoResponse>>(HttpMethod.Get,
+            $"/api/productos?categoriaId={category.Id}&busqueda=historico", app.Admin);
+        Assert.Equal(expected, detail);
+        Assert.Equal(category.Nombre, detail.CategoriaNombre);
+        Assert.Equal(1, list.TotalCount);
+        Assert.Equal(expected, Assert.Single(list.Items));
     }
 
     [Fact]

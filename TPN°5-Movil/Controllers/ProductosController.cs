@@ -32,11 +32,6 @@ public class ProductosController : ControllerBase
         query.Select(p => new ProductoResponse(p.Id, p.Nombre, p.Descripcion, p.Precio, p.Stock,
             p.Imagen == null ? null : p.Imagen.RutaRelativa, p.CategoriaId, p.Categoria.Nombre));
 
-    private static void ValidarPagina(int page, int pageSize)
-    {
-        Paginacion.Validar(page, pageSize);
-    }
-
     [HttpGet]
     public async Task<ActionResult<PaginatedResult<ProductoResponse>>> GetAll(
         [FromQuery] int page = 1,
@@ -45,13 +40,11 @@ public class ProductosController : ControllerBase
         [FromQuery] int? categoriaId = null,
         [FromQuery] int? proveedorId = null)
     {
-        ValidarPagina(page, pageSize);
+        Paginacion.Validar(page, pageSize);
         if (categoriaId <= 0 || proveedorId <= 0)
             throw new ApiException("Los filtros de categoría y proveedor deben ser positivos.");
         busqueda = busqueda?.Trim();
-        var query = ProductosActivos
-            .AsNoTracking()
-            .AsQueryable();
+        var query = ProductosActivos.AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(busqueda))
             query = query.Where(p => p.Nombre.Contains(busqueda) || (p.Descripcion != null && p.Descripcion.Contains(busqueda)));
@@ -87,7 +80,7 @@ public class ProductosController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10)
     {
-        ValidarPagina(page, pageSize);
+        Paginacion.Validar(page, pageSize);
         if (!await _db.Productos.AnyAsync(p => p.Id == id))
             return NotFound();
 
@@ -136,7 +129,7 @@ public class ProductosController : ControllerBase
         var producto = new Producto
         {
             Nombre = request.Nombre.Trim(),
-            Descripcion = string.IsNullOrWhiteSpace(request.Descripcion) ? null : request.Descripcion.Trim(),
+            Descripcion = Normalizacion.Opcional(request.Descripcion),
             Precio = request.Precio!.Value,
             Stock = 0,
             CategoriaId = request.CategoriaId!.Value,
@@ -161,7 +154,7 @@ public class ProductosController : ControllerBase
             throw new ApiException("La categoría indicada no existe.", StatusCodes.Status404NotFound);
 
         producto.Nombre = request.Nombre.Trim();
-        producto.Descripcion = string.IsNullOrWhiteSpace(request.Descripcion) ? null : request.Descripcion.Trim();
+        producto.Descripcion = Normalizacion.Opcional(request.Descripcion);
         producto.Precio = request.Precio!.Value;
         producto.CategoriaId = request.CategoriaId!.Value;
 
