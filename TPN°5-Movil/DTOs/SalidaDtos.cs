@@ -18,7 +18,7 @@ public sealed class SalidaRequest
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public class DetalleSalidaUpdateRequest
 {
-    [Required, Range(1, int.MaxValue)]
+    [Required, Range(0, int.MaxValue)]
     public int? Cantidad { get; init; }
 }
 

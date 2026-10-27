@@ -5,7 +5,7 @@ modelo, los contratos implementados, las instrucciones de entorno, las migracion
 las pruebas y el plan de continuidad de la API. Es la documentación vigente que se
 debe leer al retomar el proyecto y actualizar en los próximos bloques.
 
-Última actualización: 26 de octubre de 2026, zona America/Buenos_Aires.
+Última actualización: 27 de octubre de 2026, zona America/Buenos_Aires.
 Repositorio: [LuAlzuri/TPN-5-Movil-Correcion](https://github.com/LuAlzuri/TPN-5-Movil-Correcion).
 API: `TPN°5-Movil`, ASP.NET Core con .NET 9, EF Core 9 y SQL Server.
 
@@ -32,6 +32,21 @@ API: `TPN°5-Movil`, ASP.NET Core con .NET 9, EF Core 9 y SQL Server.
 
 ## 1 Estado actual y próximo bloque
 
+**Actualización del bloque 12.3 (27 de octubre de 2026):** se completó la validación
+funcional en SQL Server 2022/Linux desde `dc37184` y se corrigieron dos diferencias
+reales: el carrito ahora limita la cantidad a stock y acepta cero como retiro de
+línea; los deadlocks/lock timeouts envueltos por EF Core se traducen a 409.
+La rama de entrega es `validacion/paso-12-3`. Después de la validación, el usuario
+autorizó el commit y la subida de esta entrega para revisión antes de integrar en
+main. El merge queda a su cargo; no se autoriza modificar bases personales.
+
+Resultado final: 454 comprobaciones funcionales aprobadas, cero fallidas, en doce
+escenarios, más siete comprobaciones de actualización de migraciones aprobadas.
+Las pruebas se ejecutaron fuera del repositorio contra bases y almacenamiento
+exclusivos de una instancia SQL Server descartable. No se modificó ninguna base
+personal. No se agregó una suite de pruebas al repositorio ni una migración vacía.
+Consultar la sección 14.3 para alcance y límites.
+
 La última suite versionada aprobó 165 pruebas en SQLite aislada, con 0 fallidas y
 0 omitidas. Después de esa ejecución el usuario pidió eliminar todas las pruebas
 exitosas: se retiraron la carpeta tests y su proyecto de la solución. Los resultados
@@ -44,27 +59,25 @@ El PR #11 está integrado en main mediante `6e35de1`, verificado al iniciar el p
 Los resultados figuran en la sección 14.
 La unicidad de CUIT/CUIL entre clientes y entre proveedores tiene migraciones propias.
 
-Los PR del 1 al 13 están integrados en `main`, según las comprobaciones realizadas
-al iniciar el bloque 12.2. El último es el PR #13, integrado mediante
-`7269ef6`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
+Los PR del 1 al 14 están integrados en `main`, verificado al iniciar el bloque
+12.3. El último es el PR #14, integrado mediante `dc37184`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
 automáticamente por estar escrito aquí.
 
 El usuario autorizó el **paso 11, flujo completo de salidas y carrito**, incluida
 la confirmación por Administrador y Empleado y la referencia del confirmador a Usuario.
 Está publicado en `codex/paso-11-salidas-stock` mediante el PR #12 y validado mediante
 361 comprobaciones temporales aprobadas, sin incorporar pruebas al repositorio.
-El PR #12 fue integrado por el usuario mediante `2775d66`. No se aplicó
-la nueva migración a ninguna base.
+El PR #12 fue integrado por el usuario mediante `2775d66`. En ese bloque no se
+aplicó la migración; en 12.3 se ejecutó únicamente en bases descartables de prueba.
 El bloque **12.1, completar y corregir Usuarios**, está autorizado, implementado
 y publicado en `codex/paso-12-1-usuarios` mediante el PR #13: 293 comprobaciones
 temporales aprobadas y compilación sin errores ni advertencias. El PR #13 está integrado mediante `7269ef6`.
 El usuario autorizó el bloque **12.2 de consultas administrativas de históricos y
 eliminados**. Está publicado en `codex/paso-12-2-auditoria` mediante el PR #14:
 494 comprobaciones temporales aprobadas, compilación sin errores ni advertencias
-y traducción a SQL Server comprobada sin conexión. El PR #14 está abierto para
-revisión e integración por el usuario. La
-validación funcional integral en SQL Server y la preparación de entrega siguen
-pendientes de su propio alcance y autorización.
+y traducción a SQL Server comprobada sin conexión. El PR #14 fue integrado por el usuario. La validación funcional integral en SQL
+Server se completó en el bloque 12.3 y el usuario autorizó su entrega por rama
+para revisión previa al merge.
 
 | Área | Estado vigente |
 | --- | --- |
@@ -80,7 +93,7 @@ pendientes de su propio alcance y autorización.
 | Ingresos y stock | Paso 10 integrado en PR #11 |
 | Salidas, carrito y stock | Paso 11 integrado en PR #12 |
 | CRUD general de usuarios | Bloque 12.1 integrado en PR #13 |
-| Consultas de históricos y eliminados | Bloque 12.2 publicado en PR #14; pendiente de integración |
+| Consultas de históricos y eliminados | Bloque 12.2 integrado en PR #14 |
 | Base personal del usuario | No se verificó ni migró; no asumir que está preparada |
 
 POST /api/usuarios deja de devolver 501 en el bloque 12.1. Los tres tipos de cuenta
@@ -258,8 +271,10 @@ sus propias salidas. Obtener ClienteId y UsuarioConfirmacionId del JWT validado 
 corresponda; no aceptarlos desde el JSON para asignar identidad.
 
 Cada producto tiene un solo detalle por salida. Cambiar cantidades actualiza el
-detalle existente. No persistir cantidad cero o negativa: quitar el producto
-mediante su operación de eliminación.
+detalle existente. No persistir cantidad cero o negativa. Desde el bloque 12.3,
+POST/PUT con cantidad cero retira la línea y responde 204; DELETE sigue disponible.
+Una cantidad negativa se rechaza con 400. Con stock 5 se puede solicitar hasta 5,
+nunca 6. Se valida al agregar, editar y solicitar, y nuevamente al confirmar la venta.
 
 El carrito no reserva ni descuenta stock. Al confirmar el cliente
 (`ConfirmarXCliente = true`), se bloquean sus detalles y la solicitud queda
@@ -799,8 +814,8 @@ eliminado no se puede leer/modificar mediante una ruta ajena.
 | GET | `/api/salidas/{id}` | Tres roles; Cliente solo su encabezado, detalles y total |
 | GET | `/api/salidas/{id}/detalles/{detalleId}` | Tres roles; pertenencia y propiedad comprobadas |
 | POST | `/api/salidas` | Cliente; crea su encabezado desde JWT; 201 y Location |
-| POST | `/api/salidas/{id}/detalles` | Cliente propietario; crea detalle 201 con Location o actualiza cantidad del mismo producto 200 |
-| PUT | `/api/salidas/{id}/detalles/{detalleId}` | Cliente propietario; reemplaza cantidad; 200 |
+| POST | `/api/salidas/{id}/detalles` | Cliente propietario; crea detalle 201 con Location, actualiza cantidad 200 o retira con cantidad cero 204 |
+| PUT | `/api/salidas/{id}/detalles/{detalleId}` | Cliente propietario; reemplaza cantidad; 200, o 204 si cero retira la línea |
 | DELETE | `/api/salidas/{id}/detalles/{detalleId}` | Cliente propietario; quita físicamente un detalle en borrador; 204 |
 | POST | `/api/salidas/{id}/confirmar-cliente` | Cliente propietario; solicita la salida y bloquea detalles; 200 |
 | POST | `/api/salidas/{id}/confirmar` | Administrador o Empleado; confirma y descuenta stock una vez; 200 |
@@ -814,9 +829,10 @@ aceptan desde los JSON de encabezado/detalle. Las confirmaciones no enlazan un
 body: un JSON adicional no decide actor, cantidades ni estados.
 
 SalidaRequest solo admite Observaciones, opcional, máximo 1000, recortada o null.
-DetalleSalidaCreateRequest exige ProductoId y Cantidad positivos; Update solo
-Cantidad. Campos desconocidos se rechazan, incluidos precio, descuento, cliente,
-confirmador y estado. Cantidad cero/negativa no elimina: requiere DELETE.
+DetalleSalidaCreateRequest exige ProductoId positivo y Cantidad no negativa; Update
+solo Cantidad. Los detalles persistidos mantienen Cantidad >= 1. Campos desconocidos se rechazan, incluidos precio, descuento, cliente,
+confirmador y estado. Cantidad cero retira la línea con 204; negativa se rechaza. DELETE sigue disponible.
+POST con cero sin línea previa responde 204 sin crear registros.
 Puede haber varios carritos por cliente; no se impone un único carrito abierto.
 
 Un producto ocupa un solo detalle por salida (índice único conservado). POST sobre
@@ -830,7 +846,7 @@ subtotales, con límites decimal(18,2). No hay columnas nuevas para importes.
 Los descuentos históricos válidos se conservan; no se agrega edición de descuentos.
 
 Crear, editar y confirmar por cliente no reserva ni descuenta existencias; se
-permite solicitar más unidades que el stock actual. Ambas confirmaciones exigen
+rechaza solicitar más unidades que el stock actual con 409. Ambas confirmaciones exigen
 al menos un detalle y productos activos. Solicitar bloquea altas, cambios y bajas
 de detalles. Repetir cualquiera de las confirmaciones devuelve 409.
 
@@ -841,7 +857,9 @@ afectadas. Actualiza productos por Id ascendente, exigiendo Stock >= Cantidad.
 Cualquier producto sin stock, eliminado o fallo intermedio revierte estado, actor,
 fecha y todos los descuentos de stock. No hay confirmación parcial ni stock negativo.
 Las escrituras revalidan el perfil activo del actor dentro de la transacción.
-Los conflictos SQL Server 1205/1222 se devuelven como 409 para reintentar.
+Los conflictos SQL Server 1205/1222 se devuelven como 409 para reintentar,
+incluso cuando EF Core los envuelve en InvalidOperationException. No se reintentan
+movimientos automáticamente.
 
 DELETE del encabezado antes de confirmar operativamente conserva detalles y estados
 históricos, sin mover stock, incluso si ya lo solicitó el cliente. Repetir DELETE
@@ -1326,6 +1344,78 @@ Se reutilizó la adaptación temporal de descuentos SQLite de los bloques anteri
 sin modificar la representación decimal del modelo de producción ni ejecutar de
 nuevo sus suites completas. La validación integral de SQL Server queda para 12.3.
 
+### 14.3 Validación integral de SQL Server — bloque 12.3
+
+Se partió del main `dc37184` con el PR #14 integrado. El usuario autorizó continuar
+con el bloque 12.3 y reiteró que el carrito solo puede solicitar entre cero y el
+stock disponible. Cero se interpreta como retirar la línea, sin persistir un detalle
+cero ni mover stock. Se explicaron los archivos afectados y el cambio de respuesta
+204 antes de implementar. La confirmación sigue permitiendo stock final cero.
+
+Se utilizaron .NET SDK 9.0.320, dotnet-ef 9.0.11 y SQL Server 2022 Developer en Linux,
+con imagen verificada por digest
+`sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718`.
+El servidor y la API escucharon solo en loopback. Credenciales y claves se generaron
+para la prueba, fuera de Git. Las imágenes se guardaron en un webroot externo al
+checkout. Todos los scripts y resultados temporales quedaron fuera del repositorio.
+
+La primera ejecución detectó dos problemas: el carrito admitía más que el stock,
+y una carrera de salidas devolvió 500 porque EF Core envolvía un deadlock 1205 en
+InvalidOperationException. Se corrigieron SalidaDtos, SalidasController y
+SalidaService para altas/cambios/cero y revalidación al solicitar. Se agregó
+ConflictosSql, compartido por IngresoService y SalidaService, para reconocer solo
+1205/1222 en la cadena de excepciones y responder 409 sin reintento automático.
+No se alteraron entidades, restricciones, snapshot ni migraciones.
+
+Durante la preparación también se corrigió el script temporal de inyección de
+fallos: CREATE TRIGGER necesita iniciar su batch y el comando debía apuntar a la
+misma base que la API. Esa falla del harness no se presentó como defecto de la API.
+La ejecución consolidada final se hizo desde otra base vacía con ambas correcciones.
+
+**Resultado funcional:** 454 comprobaciones aprobadas, cero fallidas, doce escenarios:
+
+1. JWT, roles, rutas anónimas, firma inválida, credenciales incorrectas y CORS.
+2. CRUD, validación, email/CUIT normalizado único, paginado y revocación por baja.
+3. Ingreso borrador/confirmado, precio/descuento, bloqueo de detalles y reversión.
+4. Carrito, detalle único, IDOR, solicitud y confirmación por ambos operadores.
+5. Falta de stock y reversión de ingreso rechazada sin cambios parciales.
+6. Cantidad 0..stock: cero retira, exceso no crea ni modifica y solicitud revalida.
+7. Rollback de ingreso y salida ante error SQL real en el segundo producto.
+8. Tres rondas de doble confirmación de ingresos, doble confirmación de salidas
+   y ventas distintas compitiendo por stock: una operación 200 y la otra 409.
+9. Auditoría, filtros, permisos y producto eliminado.
+10. Carga/reemplazo real de imágenes PNG en Linux, MIME, archivo corrupto,
+    autorización, limpieza del archivo anterior y cabecera nosniff.
+11. Rollback del soft delete de un ingreso si falla la reversión del segundo
+    producto, seguido de un reintento que resta una sola vez.
+12. Históricos con producto, categoría, proveedor, cliente y empleado eliminados:
+    se conservan contrapartes y confirmadores; los tokens dados de baja se rechazan.
+
+Las consultas finales comprobaron cero stocks negativos, cero detalles con cantidad
+no positiva y cero duplicados de Producto por Salida. Los fallos SQL inyectados
+respondieron 500 de forma deliberada y revirtieron todo; no se confundieron con los
+conflictos recuperables 409.
+
+**Migraciones:** las catorce se aplicaron desde cero en bases de prueba. Además se
+hicieron siete comprobaciones de actualización: base detenida en migración once,
+aplicación de las tres restantes, preservación del confirmador y estado de una
+salida existente, normalización calculada de CUIL de cliente y CUIT de proveedor,
+y repetición de database update sin reaplicar migraciones. No se probó convertir
+el historial legacy ni hacer downgrade con confirmaciones de Administrador.
+
+La solución compiló sin errores ni advertencias y EF Core no detecta cambios de
+modelo pendientes. Las bases descartables se eliminaron al detener el contenedor
+creado para este bloque. No se aplicaron migraciones a una base personal. La suite
+retirada no se reintrodujo ni se afirma haber reejecutado todas sus pruebas históricas.
+
+**Entrega:** el usuario autorizó registrar y subir los cambios de este bloque en
+una rama para su revisión previa al merge. No se autoriza el merge automático. Para instalar: copia de seguridad si existe una base, revisar su historial,
+configurar conexión/JWT de forma segura, usar EF Core 9.0.11 y aplicar únicamente la
+cadena compatible; después ejecutar el bootstrap solo si no existe Administrador.
+No usar el modo bootstrap ni database update automáticamente al arrancar la API.
+El carrito no reserva stock: una venta ajena puede invalidar un carrito existente,
+por lo que solicitar y confirmar deben volver a comprobar disponibilidad.
+
 ## 15 Plan de trabajo y alcance por autorizar
 
 El plan original se mantiene con los siguientes estados:
@@ -1348,10 +1438,10 @@ El plan original se mantiene con los siguientes estados:
 | 9.5 | CRUD de productos e imágenes | Implementado e integrado en PR #10 |
 | 10 | Flujo completo de ingresos y stock | Integrado en PR #11 |
 | 11 | Flujo completo de salidas y stock | Integrado en PR #12 |
-| 12 | Validación integral y entrega | En curso por bloques; no completado |
+| 12 | Validación integral y entrega | Validación completada; entrega del bloque 12.3 pendiente de revisión |
 | 12.1 | Completar y corregir Usuarios | Integrado en PR #13 |
-| 12.2 | Consultas administrativas de históricos y eliminados | Publicado en PR #14; pendiente de integración |
-| 12.3 propuesto | Validación integral en SQL Server y preparación de entrega | Pendiente de alcance y autorización |
+| 12.2 | Consultas administrativas de históricos y eliminados | Integrado en PR #14 |
+| 12.3 | Validación integral en SQL Server y preparación de entrega | Validado; entrega por rama autorizada para revisión previa al merge |
 
 Los pasos 2 al 6 se revisaron después sin duplicar entidades ni migraciones. Que
 el modelo exista no significa que sus flujos funcionales estén terminados.
@@ -1429,7 +1519,9 @@ escrituras de auditoría.
 
 ## 16 Historial de entregas
 
-Estado verificado al publicar el bloque 12.2: PR #1 al #13 integrados; PR #14 abierto.
+Estado verificado al iniciar el bloque 12.3: PR #1 al #14 integrados.
+El usuario autorizó la entrega del bloque 12.3 en `validacion/paso-12-3`
+para revisión previa al merge; comprobar el estado actual en GitHub.
 Los hashes de la columna Commit identifican el trabajo de cada rama.
 
 | Entrega | Rama | Commit | PR |

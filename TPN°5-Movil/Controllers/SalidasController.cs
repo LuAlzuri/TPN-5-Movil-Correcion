@@ -44,14 +44,18 @@ public class SalidasController(SalidaService salidas) : ControllerBase
         CancellationToken cancellationToken)
     {
         var (detalle, creado) = await salidas.AgregarDetalleAsync(id, request, User.ObtenerClienteId(), cancellationToken);
+        if (detalle is null) return NoContent();
         return creado ? CreatedAtAction(nameof(GetDetalle), new { id, detalleId = detalle.Id }, detalle) : Ok(detalle);
     }
 
     [HttpPut("{id:int}/detalles/{detalleId:int}")]
     [Authorize(Roles = Usuario.RolCliente)]
     public async Task<ActionResult<DetalleSalidaResponse>> EditarDetalle(int id, int detalleId,
-        [FromBody] DetalleSalidaUpdateRequest request, CancellationToken cancellationToken) =>
-        Ok(await salidas.EditarDetalleAsync(id, detalleId, request, User.ObtenerClienteId(), cancellationToken));
+        [FromBody] DetalleSalidaUpdateRequest request, CancellationToken cancellationToken)
+    {
+        var detalle = await salidas.EditarDetalleAsync(id, detalleId, request, User.ObtenerClienteId(), cancellationToken);
+        return detalle is null ? NoContent() : Ok(detalle);
+    }
 
     [HttpDelete("{id:int}/detalles/{detalleId:int}")]
     [Authorize(Roles = Usuario.RolCliente)]
