@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using System.Data;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using TPN_5_MOVIL.Data;
@@ -204,9 +203,7 @@ public sealed class IngresoService(AppDbContext db)
             await transaction.CommitAsync(ct);
             return result;
         }
-        catch (SqlException ex) when (ex.Number is 1205 or 1222)
-        { throw Conflicto("La operación coincidió con otra modificación; vuelva a intentarla."); }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 1205 or 1222 })
+        catch (Exception ex) when (ConflictosSql.EsConcurrencia(ex))
         { throw Conflicto("La operación coincidió con otra modificación; vuelva a intentarla."); }
     }
 

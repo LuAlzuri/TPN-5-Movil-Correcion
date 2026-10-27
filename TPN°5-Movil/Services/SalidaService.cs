@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using System.Data;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using TPN_5_MOVIL.Data;
 using TPN_5_MOVIL.DTOs;
@@ -67,17 +66,26 @@ public sealed class SalidaService(AppDbContext db)
         }, ct);
     }
 
-    public Task<(DetalleSalidaResponse Detalle, bool Creado)> AgregarDetalleAsync(int id, DetalleSalidaCreateRequest request,
+    public Task<(DetalleSalidaResponse? Detalle, bool Creado)> AgregarDetalleAsync(int id, DetalleSalidaCreateRequest request,
         int clienteId, CancellationToken ct)
     {
         Validar(request);
         return TransaccionAsync(clienteId, true, async () =>
         {
             ExigirBorrador(await BloquearAsync(id, clienteId, ct));
+            var details = await DetallesAsync(id, ct);
+            var detail = details.SingleOrDefault(d => d.ProductoId == request.ProductoId!.Value);
+            if (request.Cantidad == 0)
+            {
+                if (detail is not null)
+                    ExigirCambio(await db.DetallesSalida.IgnoreQueryFilters().Where(d => d.SalidaId == id && d.Id == detail.Id)
+                        .ExecuteDeleteAsync(ct));
+                return ((DetalleSalidaResponse?)null, false);
+            }
             var product = await db.Productos.AsNoTracking().SingleOrDefaultAsync(p => p.Id == request.ProductoId!.Value, ct)
                 ?? throw NoEncontrado("El producto no existe o está eliminado.");
-            var details = await DetallesAsync(id, ct);
-            var detail = details.SingleOrDefault(d => d.ProductoId == product.Id);
+            if (request.Cantidad > product.Stock)
+                throw Conflicto("La cantidad solicitada supera el stock disponible.");
             var created = detail is null;
             if (created)
             {
@@ -94,11 +102,11 @@ public sealed class SalidaService(AppDbContext db)
             else
                 ExigirCambio(await db.DetallesSalida.IgnoreQueryFilters().Where(d => d.SalidaId == id && d.Id == detail.Id)
                     .ExecuteUpdateAsync(s => s.SetProperty(d => d.Cantidad, detail.Cantidad), ct));
-            return (Respuesta(detail), created);
+            return ((DetalleSalidaResponse?)Respuesta(detail), created);
         }, ct);
     }
 
-    public Task<DetalleSalidaResponse> EditarDetalleAsync(int id, int detalleId, DetalleSalidaUpdateRequest request,
+    public Task<DetalleSalidaResponse?> EditarDetalleAsync(int id, int detalleId, DetalleSalidaUpdateRequest request,
         int clienteId, CancellationToken ct)
     {
         Validar(request);
@@ -106,13 +114,21 @@ public sealed class SalidaService(AppDbContext db)
         {
             ExigirBorrador(await BloquearAsync(id, clienteId, ct));
             var detail = await BuscarDetalleAsync(id, detalleId, ct);
-            if (!await db.Productos.AnyAsync(p => p.Id == detail.ProductoId, ct))
-                throw NoEncontrado("El producto no existe o está eliminado.");
+            if (request.Cantidad == 0)
+            {
+                ExigirCambio(await db.DetallesSalida.IgnoreQueryFilters().Where(d => d.SalidaId == id && d.Id == detalleId)
+                    .ExecuteDeleteAsync(ct));
+                return (DetalleSalidaResponse?)null;
+            }
+            var product = await db.Productos.AsNoTracking().SingleOrDefaultAsync(p => p.Id == detail.ProductoId, ct)
+                ?? throw NoEncontrado("El producto no existe o está eliminado.");
+            if (request.Cantidad > product.Stock)
+                throw Conflicto("La cantidad solicitada supera el stock disponible.");
             detail.Cantidad = request.Cantidad!.Value;
             ValidarImportes((await DetallesAsync(id, ct)).Where(d => d.Id != detalleId).Append(detail));
             ExigirCambio(await db.DetallesSalida.IgnoreQueryFilters().Where(d => d.SalidaId == id && d.Id == detalleId)
                 .ExecuteUpdateAsync(s => s.SetProperty(d => d.Cantidad, detail.Cantidad), ct));
-            return Respuesta(detail);
+            return (DetalleSalidaResponse?)Respuesta(detail);
         }, ct);
     }
 
@@ -199,8 +215,12 @@ public sealed class SalidaService(AppDbContext db)
         ValidarImportes(details);
         var ids = details.Select(d => d.ProductoId).Distinct().ToArray();
         if (ids.Length != details.Count) throw Conflicto("Un producto está repetido en la salida.");
-        if (await db.Productos.CountAsync(p => ids.Contains(p.Id), ct) != ids.Length)
+        var products = await db.Productos.AsNoTracking().Where(p => ids.Contains(p.Id))
+            .Select(p => new { p.Id, p.Stock }).ToDictionaryAsync(p => p.Id, p => p.Stock, ct);
+        if (products.Count != ids.Length)
             throw Conflicto("Un producto de la salida ya no está disponible.");
+        if (details.Any(d => d.Cantidad > products[d.ProductoId]))
+            throw Conflicto("La cantidad solicitada supera el stock disponible.");
         return details;
     }
 
@@ -218,9 +238,7 @@ public sealed class SalidaService(AppDbContext db)
             await transaction.CommitAsync(ct);
             return result;
         }
-        catch (SqlException ex) when (ex.Number is 1205 or 1222)
-        { throw Conflicto("La operación coincidió con otra modificación; vuelva a intentarla."); }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 1205 or 1222 })
+        catch (Exception ex) when (ConflictosSql.EsConcurrencia(ex))
         { throw Conflicto("La operación coincidió con otra modificación; vuelva a intentarla."); }
     }
 
