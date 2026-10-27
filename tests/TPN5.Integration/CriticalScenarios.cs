@@ -470,6 +470,51 @@ public sealed class CriticalScenarios(SqlServerFixture sql)
         Assert.Equal(1, await StockAsync(app, cheap));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Cliente_consulta_cancelados_propios_sin_poder_modificarlos(bool solicitado)
+    {
+        await using var app = await sql.CreateApplicationAsync();
+        await app.LoginAdminAsync();
+        var inventory = await InventoryAsync(app, stock: 2);
+        var other = await app.RegisterAsync(Usuario.RolCliente);
+        var cart = await CartAsync(app, inventory.Client, [(inventory.ProductId, 1)], request: solicitado);
+        var detail = Assert.Single(cart.Detalles);
+        Assert.False(cart.Eliminado);
+        await app.StatusAsync(HttpMethod.Delete, $"/api/salidas/{cart.Id}", HttpStatusCode.NoContent, inventory.Client);
+        var canceled = await app.JsonAsync<SalidaResponse>(HttpMethod.Get, $"/api/salidas/{cart.Id}", inventory.Client);
+        Assert.True(canceled.Eliminado);
+        Assert.Equal(solicitado, canceled.ConfirmarXCliente);
+        Assert.False(canceled.ConfirmarXEmpleado);
+        Assert.Equal(cart.Total, canceled.Total);
+        Assert.Equal(detail, Assert.Single(canceled.Detalles));
+        var page = await app.JsonAsync<PaginatedResult<SalidaResponse>>(HttpMethod.Get,
+            $"/api/salidas?productoId={inventory.ProductId}&pageSize=1", inventory.Client);
+        Assert.Equal(1, page.TotalCount);
+        Assert.Equal(canceled, Assert.Single(page.Items) with { Detalles = canceled.Detalles });
+        Assert.Equal(detail, await app.JsonAsync<DetalleSalidaResponse>(HttpMethod.Get,
+            $"/api/salidas/{cart.Id}/detalles/{detail.Id}", inventory.Client));
+        foreach (var actor in new[] { other, app.Admin, inventory.Employee })
+        {
+            var hidden = await app.JsonAsync<PaginatedResult<SalidaResponse>>(HttpMethod.Get,
+                $"/api/salidas?clienteId={inventory.Client.Id}", actor);
+            Assert.Empty(hidden.Items);
+            Assert.Equal(0, hidden.TotalCount);
+            await app.StatusAsync(HttpMethod.Get, $"/api/salidas/{cart.Id}", HttpStatusCode.NotFound, actor);
+            await app.StatusAsync(HttpMethod.Get, $"/api/salidas/{cart.Id}/detalles/{detail.Id}", HttpStatusCode.NotFound, actor);
+        }
+        await app.StatusAsync(HttpMethod.Post, $"/api/salidas/{cart.Id}/detalles", HttpStatusCode.NotFound,
+            inventory.Client, new { productoId = inventory.ProductId, cantidad = 1 });
+        await app.StatusAsync(HttpMethod.Put, $"/api/salidas/{cart.Id}/detalles/{detail.Id}", HttpStatusCode.NotFound,
+            inventory.Client, new { cantidad = 0 });
+        await app.StatusAsync(HttpMethod.Delete, $"/api/salidas/{cart.Id}/detalles/{detail.Id}", HttpStatusCode.NotFound, inventory.Client);
+        await app.StatusAsync(HttpMethod.Delete, $"/api/salidas/{cart.Id}", HttpStatusCode.NotFound, inventory.Client);
+        await app.StatusAsync(HttpMethod.Post, $"/api/salidas/{cart.Id}/confirmar-cliente", HttpStatusCode.NotFound, inventory.Client);
+        await app.StatusAsync(HttpMethod.Post, $"/api/salidas/{cart.Id}/confirmar", HttpStatusCode.NotFound, inventory.Employee);
+        Assert.Equal(2, await StockAsync(app, inventory.ProductId));
+    }
+
     private sealed record Inventory(TestAccount Employee, TestAccount Client, int CategoryId,
         int SupplierId, int ProductId, int? SeedIncomeId);
 

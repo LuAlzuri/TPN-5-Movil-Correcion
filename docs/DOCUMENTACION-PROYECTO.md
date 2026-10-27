@@ -1980,6 +1980,44 @@ los bloques 5 y 6 son opcionales y requieren evaluar su beneficio antes de
 proponer cambios. Las demás recomendaciones postergadas siguen sin autorización.
 
 
+### 15.5 Lectura de pedidos cancelados por el Cliente propietario
+
+Cambio local autorizado exclusivamente para consultar cancelaciones, en
+`ajustes/cliente-consulta-cancelados`, desde main `2624dcc` (PR #22 integrado).
+Posteriormente el usuario autorizó registrar y publicar la entrega en rama para
+revisión mediante PR; el merge queda a su cargo. No incluye registro
+público, cambio de roles, frontend ni nuevos endpoints.
+
+GET /api/salidas, GET /api/salidas/{id} y GET del detalle de una salida incluyen
+ahora los encabezados eliminados únicamente cuando consulta el Cliente propietario.
+Se omiten filtros globales solo en esa lectura, aplicando siempre ClienteId del
+token. Los filtros de listado y el paginado permanecen; un Cliente no puede leer
+pedidos ajenos, ni indicando otro clienteId. Administrador y Empleado conservan
+el listado operativo sin eliminados; la auditoría administrativa no cambia.
+
+SalidaResponse incorpora el campo JSON de solo lectura `eliminado`, conservando
+los campos existentes. El front puede mostrar Cancelado cuando es true; si es
+false, la confirmación por personal distingue Aceptado de Pendiente/En carrito.
+No se persiste un estado textual adicional.
+
+El acceso de lectura no habilita cambios: BloquearAsync sigue usando el filtro
+operativo, por lo que un cancelado devuelve 404 al intentar agregar, editar o
+quitar detalles, volver a cancelar o confirmar por Cliente/personal. No se
+restaura stock ni se ejecutan ventas al consultar. Sin cambios de esquema,
+DbContext, migraciones ni autorización de rutas.
+
+Se añaden dos casos de integración (cancelación de borrador y de pedido solicitado)
+que comprueban listado filtrado/paginado, encabezado y detalle propios, indicador
+Eliminado, preservación de importes/detalles, aislamiento frente a otros clientes,
+consulta operativa del personal sin cancelados, bloqueo de escrituras y stock
+sin cambios. Se mantienen las expectativas existentes.
+
+Verificación: `dotnet test --nologo` compiló sin advertencias y aprobó los 35 casos,
+cero fallidos y cero omitidos, contra SQL Server descartable. No se usaron bases
+personales. `git diff --check` sin errores. Publicación en rama autorizada
+posteriormente para revisión antes del merge.
+
+
 El plan original se mantiene con los siguientes estados:
 
 | Paso | Trabajo | Estado |
