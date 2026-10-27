@@ -9,7 +9,7 @@ namespace TPN_5_MOVIL.Controllers;
 
 [ApiController]
 [Route("api/ingresos")]
-[Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
+[Authorize(Roles = GruposRoles.Personal)]
 public class IngresosController(IngresoService ingresos) : ControllerBase
 {
     [HttpGet]

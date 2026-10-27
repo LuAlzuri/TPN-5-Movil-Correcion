@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using TPN_5_MOVIL.Data;
 using TPN_5_MOVIL.DTOs;
@@ -28,8 +27,7 @@ public class ClientesController(AppDbContext db, AuthService auth) : ControllerB
         [FromQuery] int pageSize = 10,
         [FromQuery] string? busqueda = null)
     {
-        if (page < 1 || pageSize < 1 || pageSize > 100 || (long)(page - 1) * pageSize > int.MaxValue)
-            throw new ApiException("Página inválida: page debe ser positivo y pageSize debe estar entre 1 y 100.");
+        Paginacion.Validar(page, pageSize);
 
         var query = ClientesValidos.AsNoTracking();
         busqueda = busqueda?.Trim();
@@ -67,8 +65,8 @@ public class ClientesController(AppDbContext db, AuthService auth) : ControllerB
     public async Task<ActionResult<ClienteResponse>> Create([FromBody] ClienteCreateRequest request)
     {
         CuitUnico.Normalizar(request.CUIT);
-        var telefono = NormalizarOpcional(request.Telefono);
-        var direccion = NormalizarOpcional(request.Direccion);
+        var telefono = Normalizacion.Opcional(request.Telefono);
+        var direccion = Normalizacion.Opcional(request.Direccion);
         var usuario = await auth.RegisterAsync(new RegisterRequest
         {
             Nombre = request.Nombre, Apellido = request.Apellido, CUIT = request.CUIT,
@@ -89,27 +87,17 @@ public class ClientesController(AppDbContext db, AuthService auth) : ControllerB
 
         await CuitUnico.ValidarClienteAsync(db, request.CUIT, id);
 
-        var email = request.Email.Trim().ToLowerInvariant();
-        var comparison = email.ToUpperInvariant();
-        if (await db.Usuarios.IgnoreQueryFilters().AnyAsync(u => u.Email.ToUpper() == comparison && u.Id != id))
-            throw new ApiException("Ya existe un usuario con ese email.", StatusCodes.Status409Conflict);
+        var email = Normalizacion.Email(request.Email);
+        await db.ExigirEmailLibreAsync(email, "Ya existe un usuario con ese email.", id);
 
         cliente.Usuario.Nombre = request.Nombre.Trim();
         cliente.Usuario.Apellido = request.Apellido.Trim();
         cliente.Usuario.CUIT = request.CUIT.Trim();
         cliente.Usuario.Email = email;
-        cliente.Telefono = NormalizarOpcional(request.Telefono);
-        cliente.Direccion = NormalizarOpcional(request.Direccion);
+        cliente.Telefono = Normalizacion.Opcional(request.Telefono);
+        cliente.Direccion = Normalizacion.Opcional(request.Direccion);
 
-        try
-        {
-            // SaveChanges commits the Usuario and Cliente updates atomically.
-            await db.SaveChangesAsync();
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
-        {
-            throw new ApiException("Ya existe una cuenta con esos datos únicos.", StatusCodes.Status409Conflict);
-        }
+        await db.GuardarOConflictoAsync("Ya existe una cuenta con esos datos únicos.");
         return NoContent();
     }
 
@@ -124,7 +112,4 @@ public class ClientesController(AppDbContext db, AuthService auth) : ControllerB
         await db.SaveChangesAsync();
         return NoContent();
     }
-
-    private static string? NormalizarOpcional(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

@@ -16,8 +16,7 @@ public sealed class IngresoService(AppDbContext db)
     public async Task<PaginatedResult<IngresoResponse>> ListarAsync(int page, int pageSize,
         int? productoId, int? proveedorId, DateTime? desde, DateTime? hasta, CancellationToken ct)
     {
-        if (page < 1 || pageSize < 1 || pageSize > 100 || (long)(page - 1) * pageSize > int.MaxValue)
-            throw new ApiException("Página inválida: page debe ser positivo y pageSize debe estar entre 1 y 100.");
+        Paginacion.Validar(page, pageSize);
         if (productoId <= 0 || proveedorId <= 0 || desde > hasta)
             throw new ApiException("Revise los identificadores y el rango de fechas.");
 
@@ -34,13 +33,8 @@ public sealed class IngresoService(AppDbContext db)
         var details = await db.DetallesIngreso.IgnoreQueryFilters().AsNoTracking()
             .Where(d => ids.Contains(d.IngresoId)).OrderBy(d => d.Id).ToListAsync(ct);
         var lookup = details.ToLookup(d => d.IngresoId);
-        var totalPages = (int)Math.Ceiling(count / (double)pageSize);
-        return new PaginatedResult<IngresoResponse>
-        {
-            Page = page, PageSize = pageSize, TotalCount = count, TotalPages = totalPages,
-            HasNext = page < totalPages, HasPrevious = page > 1,
-            Items = rows.Select(i => Respuesta(i, lookup[i.Id])).ToList()
-        };
+        return PaginatedResult<IngresoResponse>.From(
+            rows.Select(i => Respuesta(i, lookup[i.Id])).ToList(), count, page, pageSize);
     }
 
     public async Task<IngresoResponse> ConsultarAsync(int id, CancellationToken ct = default)

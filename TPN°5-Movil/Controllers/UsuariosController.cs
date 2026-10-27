@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using TPN_5_MOVIL.Data;
 using TPN_5_MOVIL.DTOs;
@@ -33,8 +32,7 @@ public class UsuariosController : ControllerBase
         [FromQuery] int pageSize = 10,
         [FromQuery] string? busqueda = null)
     {
-        if (page < 1 || pageSize < 1 || pageSize > 100 || (long)(page - 1) * pageSize > int.MaxValue)
-            throw new ApiException("Página inválida: page debe ser positivo y pageSize debe estar entre 1 y 100.");
+        Paginacion.Validar(page, pageSize);
 
         var query = _db.Usuarios
             .AsNoTracking()
@@ -72,8 +70,8 @@ public class UsuariosController : ControllerBase
             Nombre = request.Nombre, Apellido = request.Apellido, CUIT = request.CUIT,
             Email = request.Email, Password = request.Password, Rol = request.Rol,
             FechaIngreso = request.FechaIngreso,
-            Telefono = request.Rol == Usuario.RolCliente ? NormalizarOpcional(request.Telefono) : request.Telefono,
-            Direccion = request.Rol == Usuario.RolCliente ? NormalizarOpcional(request.Direccion) : request.Direccion
+            Telefono = request.Rol == Usuario.RolCliente ? Normalizacion.Opcional(request.Telefono) : request.Telefono,
+            Direccion = request.Rol == Usuario.RolCliente ? Normalizacion.Opcional(request.Direccion) : request.Direccion
         }, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = usuario.Id }, usuario);
     }
@@ -86,9 +84,7 @@ public class UsuariosController : ControllerBase
             return NotFound();
 
         var email = request.Email;
-        var comparison = email.ToUpperInvariant();
-        if (await _db.Usuarios.IgnoreQueryFilters().AnyAsync(u => u.Email.ToUpper() == comparison && u.Id != id))
-            throw new ApiException("Ya existe un usuario con ese email.", StatusCodes.Status409Conflict);
+        await _db.ExigirEmailLibreAsync(email, "Ya existe un usuario con ese email.", id);
 
         if (usuario.Rol == Usuario.RolCliente)
             await CuitUnico.ValidarClienteAsync(_db, request.CUIT, id);
@@ -103,14 +99,7 @@ public class UsuariosController : ControllerBase
             usuario.PasswordHash = _passwordHasher.HashPassword(usuario, request.Password);
         }
 
-        try
-        {
-            await _db.SaveChangesAsync();
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
-        {
-            throw new ApiException("Ya existe una cuenta con esos datos únicos.", StatusCodes.Status409Conflict);
-        }
+        await _db.GuardarOConflictoAsync("Ya existe una cuenta con esos datos únicos.");
         return NoContent();
     }
 
@@ -120,7 +109,4 @@ public class UsuariosController : ControllerBase
         await _auth.EliminarUsuarioAsync(id, User.ObtenerUsuarioId(), cancellationToken);
         return NoContent();
     }
-
-    private static string? NormalizarOpcional(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

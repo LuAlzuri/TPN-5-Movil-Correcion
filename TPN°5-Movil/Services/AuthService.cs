@@ -5,7 +5,6 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using TPN_5_MOVIL.Data;
@@ -116,9 +115,8 @@ public class AuthService(AppDbContext db, JwtSettings jwt)
 
     private async Task<Usuario> CreateAccountAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
-        var email = request.Email.Trim().ToLowerInvariant();
-        if (await db.Usuarios.IgnoreQueryFilters().AnyAsync(u => u.Email.ToUpper() == email.ToUpperInvariant(), cancellationToken))
-            throw new ApiException("Ya existe una cuenta con ese email.", StatusCodes.Status409Conflict);
+        var email = Normalizacion.Email(request.Email);
+        await db.ExigirEmailLibreAsync(email, "Ya existe una cuenta con ese email.", ct: cancellationToken);
         if (request.Rol == Usuario.RolCliente)
             await CuitUnico.ValidarClienteAsync(db, request.CUIT, cancellationToken: cancellationToken);
         var usuario = new Usuario
@@ -132,15 +130,7 @@ public class AuthService(AppDbContext db, JwtSettings jwt)
         else if (usuario.Rol == Usuario.RolCliente)
             usuario.Cliente = new Cliente { Usuario = usuario, Telefono = request.Telefono?.Trim(), Direccion = request.Direccion?.Trim() };
         db.Usuarios.Add(usuario);
-        try
-        {
-            // EF inserts the principal and its shared-key profile in this transaction.
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
-        {
-            throw new ApiException("Ya existe una cuenta con esos datos únicos.", StatusCodes.Status409Conflict);
-        }
+        await db.GuardarOConflictoAsync("Ya existe una cuenta con esos datos únicos.", cancellationToken);
         return usuario;
     }
 

@@ -19,7 +19,7 @@ public abstract class UsuarioDatosRequest
     public string Email
     {
         get => email;
-        init => email = value?.Trim().ToLowerInvariant() ?? string.Empty;
+        init => email = Normalizacion.Email(value);
     }
 }
 

@@ -9,7 +9,7 @@ namespace TPN_5_MOVIL.Controllers;
 
 [ApiController]
 [Route("api/salidas")]
-[Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado + "," + Usuario.RolCliente)]
+[Authorize(Roles = GruposRoles.Todos)]
 public class SalidasController(SalidaService salidas) : ControllerBase
 {
     private int? PropietarioId => User.IsInRole(Usuario.RolCliente) ? User.ObtenerClienteId() : null;
@@ -71,7 +71,7 @@ public class SalidasController(SalidaService salidas) : ControllerBase
         Ok(await salidas.ConfirmarClienteAsync(id, User.ObtenerClienteId(), cancellationToken));
 
     [HttpPost("{id:int}/confirmar")]
-    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
+    [Authorize(Roles = GruposRoles.Personal)]
     public async Task<ActionResult<SalidaResponse>> Confirmar(int id, CancellationToken cancellationToken) =>
         Ok(await salidas.ConfirmarAsync(id, User.ObtenerUsuarioId(), cancellationToken));
 

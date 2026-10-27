@@ -1,3 +1,4 @@
+using TPN_5_MOVIL.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +12,7 @@ namespace TPN_5_MOVIL.Controllers;
 
 [ApiController]
 [Route("api/productos")]
-[Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado + "," + Usuario.RolCliente)]
+[Authorize(Roles = GruposRoles.Todos)]
 public class ProductosController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -33,8 +34,7 @@ public class ProductosController : ControllerBase
 
     private static void ValidarPagina(int page, int pageSize)
     {
-        if (page < 1 || pageSize < 1 || pageSize > 100 || (long)(page - 1) * pageSize > int.MaxValue)
-            throw new ApiException("Página inválida: page debe ser positivo y pageSize debe estar entre 1 y 100.");
+        Paginacion.Validar(page, pageSize);
     }
 
     [HttpGet]
@@ -81,7 +81,7 @@ public class ProductosController : ControllerBase
     }
 
     [HttpGet("{id:int}/movimientos")]
-    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
+    [Authorize(Roles = GruposRoles.Personal)]
     public async Task<ActionResult<PaginatedResult<MovimientoItem>>> GetMovimientos(
         int id,
         [FromQuery] int page = 1,
@@ -127,7 +127,7 @@ public class ProductosController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
+    [Authorize(Roles = GruposRoles.Personal)]
     public async Task<ActionResult<ProductoResponse>> Create([FromBody] ProductoCreateRequest request)
     {
         if (!await _db.Categorias.AnyAsync(c => c.Id == request.CategoriaId!.Value))
@@ -150,7 +150,7 @@ public class ProductosController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
+    [Authorize(Roles = GruposRoles.Personal)]
     public async Task<IActionResult> Update(int id, [FromBody] ProductoUpdateRequest request)
     {
         var producto = await _db.Productos.FindAsync(id);
@@ -170,7 +170,7 @@ public class ProductosController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
+    [Authorize(Roles = GruposRoles.Personal)]
     public async Task<IActionResult> Delete(int id)
     {
         var producto = await _db.Productos.FindAsync(id);
@@ -183,7 +183,7 @@ public class ProductosController : ControllerBase
     }
 
     [HttpPost("{id:int}/imagen")]
-    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
+    [Authorize(Roles = GruposRoles.Personal)]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(ImagenProductoService.MaxPeticion)]
     [RequestFormLimits(MultipartBodyLengthLimit = ImagenProductoService.MaxPeticion)]

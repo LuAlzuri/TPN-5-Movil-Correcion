@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using TPN_5_MOVIL.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -28,8 +28,7 @@ public class CategoriasController : ControllerBase
         [FromQuery] int pageSize = 10,
         [FromQuery] string? busqueda = null)
     {
-        if (page < 1 || pageSize < 1 || pageSize > 100 || (long)(page - 1) * pageSize > int.MaxValue)
-            throw new ApiException("Página inválida: page debe ser positivo y pageSize debe estar entre 1 y 100.");
+        Paginacion.Validar(page, pageSize);
 
         busqueda = busqueda?.Trim();
         var query = _db.Categorias
@@ -48,7 +47,7 @@ public class CategoriasController : ControllerBase
     }
 
     [HttpGet("catalogo")]
-    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado + "," + Usuario.RolCliente)]
+    [Authorize(Roles = GruposRoles.Todos)]
     public async Task<ActionResult<IEnumerable<CategoriaCatalogoResponse>>> GetCatalogo()
     {
         var categorias = await _db.Categorias
@@ -82,7 +81,7 @@ public class CategoriasController : ControllerBase
         var categoria = new Categoria
         {
             Nombre = request.Nombre.Trim(),
-            Descripcion = NormalizarDescripcion(request.Descripcion),
+            Descripcion = Normalizacion.Opcional(request.Descripcion),
             FechaCreacion = DateTime.UtcNow
         };
 
@@ -105,7 +104,7 @@ public class CategoriasController : ControllerBase
             throw new ApiException("Ya existe una categoría con ese nombre.", StatusCodes.Status409Conflict);
 
         categoria.Nombre = request.Nombre.Trim();
-        categoria.Descripcion = NormalizarDescripcion(request.Descripcion);
+        categoria.Descripcion = Normalizacion.Opcional(request.Descripcion);
 
         await GuardarAsync();
         return NoContent();
@@ -124,18 +123,8 @@ public class CategoriasController : ControllerBase
         return NoContent();
     }
 
-    private static string? NormalizarDescripcion(string? descripcion) =>
-        string.IsNullOrWhiteSpace(descripcion) ? null : descripcion.Trim();
-
     private async Task GuardarAsync()
     {
-        try
-        {
-            await _db.SaveChangesAsync();
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
-        {
-            throw new ApiException("Ya existe una categoría con ese nombre.", StatusCodes.Status409Conflict);
-        }
+        await _db.GuardarOConflictoAsync("Ya existe una categoría con ese nombre.");
     }
 }
