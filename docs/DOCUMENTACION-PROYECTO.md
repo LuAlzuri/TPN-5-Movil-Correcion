@@ -32,7 +32,7 @@ API: `TPN°5-Movil`, ASP.NET Core con .NET 9, EF Core 9 y SQL Server.
 
 ## 1 Estado actual y próximo bloque
 
-La última suite ejecutada aprobó 165 pruebas en SQLite aislada, con 0 fallidas y
+La última suite versionada aprobó 165 pruebas en SQLite aislada, con 0 fallidas y
 0 omitidas. Después de esa ejecución el usuario pidió eliminar todas las pruebas
 exitosas: se retiraron la carpeta tests y su proyecto de la solución. Los resultados
 se conservan como evidencia histórica, sin una suite versionada actual.
@@ -40,18 +40,22 @@ El registro transaccional, la autenticación y los CRUD de
 categorías, empleados, clientes, proveedores y productos/imágenes están implementados.
 El paso 10 de ingresos y stock está publicado en el PR #11 y validado mediante
 242 comprobaciones temporales, sin volver a incorporar pruebas al repositorio.
-El PR #11 está abierto para revisión y pendiente de integración por el usuario.
+El PR #11 está integrado en main mediante `6e35de1`, verificado al iniciar el paso 11.
 Los resultados figuran en la sección 14.
 La unicidad de CUIT/CUIL entre clientes y entre proveedores tiene migraciones propias.
 
-Los PR del 1 al 10 están integrados en `main`, según las comprobaciones realizadas
-al iniciar el paso 10. El último es el PR #10, integrado mediante
-`ec5f3ef`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
+Los PR del 1 al 11 están integrados en `main`, según las comprobaciones realizadas
+al iniciar el paso 11. El último es el PR #11, integrado mediante
+`6e35de1`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
 automáticamente por estar escrito aquí.
 
-La API todavía no está terminada funcionalmente. El próximo bloque es el **paso
-11, flujo completo de salidas y carrito**, pendiente de revisión de alcance
-y autorización. El flujo de inventario continúa pendiente de sus propios bloques.
+El usuario autorizó el **paso 11, flujo completo de salidas y carrito**, incluida
+la confirmación por Administrador y Empleado y la referencia del confirmador a Usuario.
+Está publicado en `codex/paso-11-salidas-stock` mediante el PR #12 y validado mediante
+361 comprobaciones temporales aprobadas, sin incorporar pruebas al repositorio.
+El PR #12 está abierto para revisión e integración por el usuario. No se aplicó
+la nueva migración a ninguna base.
+El paso 12 de validación integral y entrega continúa pendiente de su alcance propio.
 
 | Área | Estado vigente |
 | --- | --- |
@@ -64,8 +68,8 @@ y autorización. El flujo de inventario continúa pendiente de sus propios bloqu
 | CRUD completo de clientes | Paso 9.3 integrado en PR #8 |
 | CRUD completo de proveedores | Paso 9.4 integrado en PR #9 |
 | Productos e imágenes | Paso 9.5 integrado en PR #10 |
-| Ingresos y stock | Paso 10 publicado en PR #11; pendiente de integración |
-| Salidas, carrito y stock | Flujo funcional pendiente |
+| Ingresos y stock | Paso 10 integrado en PR #11 |
+| Salidas, carrito y stock | Paso 11 publicado en PR #12; pendiente de integración |
 | Auditoría completa e históricos autorizados | Pendientes |
 | Base personal del usuario | No se verificó ni migró; no asumir que está preparada |
 
@@ -73,7 +77,6 @@ Los endpoints temporalmente no disponibles devuelven `501` después de los
 controles de autorización y validación de entrada que correspondan:
 
 - `POST /api/usuarios`.
-- Creación de salidas mediante su servicio actual.
 
 Los tres tipos de cuenta pueden crearse mediante `POST /api/auth/register`,
 exclusivo de Administrador. Los empleados y clientes también pueden crearse
@@ -169,7 +172,7 @@ columna persistida de Producto. El paso 9.5 incorpora la carga funcional de arch
 | --- | --- |
 | Ingreso | Id, Fecha, Observaciones, ProveedorId, EmpleadoId creador, Confirmado, FechaConfirmacion, EmpleadoConfirmacionId, Eliminado; varios DetalleIngreso |
 | DetalleIngreso | Id, IngresoId, ProductoId, Cantidad, PrecioUnitario, DescAplicado |
-| Salida | Id, Fecha, Observaciones, ClienteId, EmpleadoId opcional hasta confirmar, ConfirmarXCliente, ConfirmarXEmpleado, FechaConfirmacionCliente, FechaConfirmacionEmpleado, Eliminado; varios DetalleSalida |
+| Salida | Id, Fecha, Observaciones, ClienteId, UsuarioConfirmacionId opcional hasta confirmar (FK a Usuario), ConfirmarXCliente, ConfirmarXEmpleado, FechaConfirmacionCliente, FechaConfirmacionEmpleado, Eliminado; varios DetalleSalida |
 | DetalleSalida | Id, SalidaId, ProductoId, Cantidad, PrecioUnitario, DescAplicado |
 
 `DetalleSalida` tiene un índice único por `(SalidaId, ProductoId)` para impedir
@@ -202,8 +205,8 @@ No se acordó acceso anónimo al catálogo.
 
 ## 5 Reglas de stock y movimientos pendientes
 
-El paso 10 implementa el flujo de ingresos de esta sección. Las reglas de salidas
-y carrito continúan como diseño pendiente de implementación y autorización.
+El paso 10 implementa ingresos y el paso 11 implementa salidas y carrito según
+las reglas de esta sección.
 
 ### 5.1 Reglas comunes
 
@@ -244,7 +247,7 @@ Confirmación y reversión deben ser atómicas y no ejecutarse dos veces.
 ### 5.3 Salidas y carrito
 
 El encabezado es el carrito del cliente autenticado. El cliente solo administra
-sus propias salidas. Obtener ClienteId y EmpleadoId del JWT validado cuando
+sus propias salidas. Obtener ClienteId y UsuarioConfirmacionId del JWT validado cuando
 corresponda; no aceptarlos desde el JSON para asignar identidad.
 
 Cada producto tiene un solo detalle por salida. Cambiar cantidades actualiza el
@@ -255,15 +258,15 @@ El carrito no reserva ni descuenta stock. Al confirmar el cliente
 (`ConfirmarXCliente = true`), se bloquean sus detalles y la solicitud queda
 disponible para confirmación operativa.
 
-El empleado confirma solamente después del cliente: vuelve a comprobar el stock,
-registra su ID desde el JWT y la fecha y descuenta todo en una transacción. Si falla
-un producto, revierte toda la operación. El diseño también permite que Administrador
-confirme salidas, pero este rol no tiene perfil Empleado; antes de implementar ese
-caso debe resolverse cómo registrar al confirmador compatible con la FK actual,
-sin inventar un EmpleadoId ni alterar los permisos por suposición.
-
+Administrador y Empleado pueden confirmar solamente después del cliente: se
+comprueba nuevamente el stock, se registra el UsuarioConfirmacionId desde el JWT y
+la fecha UTC y se descuenta todo en una transacción. Si falla un producto, se
+revierte toda la operación. UsuarioConfirmacionId referencia Usuarios con Restrict;
+los administradores mantienen su único rol y no reciben perfil Empleado.
+Los nombres históricos ConfirmarXEmpleado y FechaConfirmacionEmpleado representan
+la confirmación operativa de cualquiera de esos dos roles.
 El cliente puede eliminar su salida mientras no esté confirmada por el empleado,
-incluso si él ya la solicitó. Después de esa confirmación no puede eliminarla.
+incluso si él ya la solicitó. Después de la confirmación operativa no puede eliminarla.
 No se incluyó cancelación posterior: requeriría un flujo específico de reposición.
 
 ## 6 Borrado lógico e históricos
@@ -331,7 +334,8 @@ mismo rol, un único perfil válido y la misma versión de credenciales. Agrega 
 consulta por petición; si falla la base no se concede acceso por omisión.
 
 Los helpers `Security/UsuarioAutenticado.cs` permiten obtener UsuarioId, ClienteId
-y EmpleadoId del principal validado. Usarlos en los futuros flujos. CORS sigue
+y EmpleadoId del principal validado. Salidas usa ObtenerUsuarioId para su confirmador
+y ObtenerClienteId para la propiedad del carrito. CORS sigue
 permisivo para orígenes, métodos y cabeceras, sin credenciales de cookies.
 
 ## 8 Categorías implementadas
@@ -740,15 +744,70 @@ productos históricos estén eliminados. No se agregan endpoints de auditoría d
 ingresos eliminados en este bloque. Un detalle de otro ingreso o encabezado
 eliminado no se puede leer/modificar mediante una ruta ajena.
 
-### 11.6 Salidas pendientes
+### 11.6 Salidas y carrito implementados en el paso 11
 
-Las consultas actuales de salidas admiten Administrador y Empleado, con filtros
-productoId, clienteId y desde/hasta, orden Fecha/Id descendente y paginado.
-SalidaResponse expone encabezado, estados, fechas y detalles; SalidaRequest solo
-Observaciones, sin ClienteId ni EmpleadoId para elegir la identidad.
-MovimientoService mantiene únicamente la creación de salidas en 501. Las consultas
-propias del Cliente y el flujo completo de carrito/stock se implementarán en el
-paso 11, sin reactivar el antiguo descuento inmediato de stock al crear.
+| Método | Ruta | Permiso y resultado |
+| --- | --- | --- |
+| GET | `/api/salidas` | Tres roles; Cliente solo sus salidas; paginado y filtros |
+| GET | `/api/salidas/{id}` | Tres roles; Cliente solo su encabezado, detalles y total |
+| GET | `/api/salidas/{id}/detalles/{detalleId}` | Tres roles; pertenencia y propiedad comprobadas |
+| POST | `/api/salidas` | Cliente; crea su encabezado desde JWT; 201 y Location |
+| POST | `/api/salidas/{id}/detalles` | Cliente propietario; crea detalle 201 con Location o actualiza cantidad del mismo producto 200 |
+| PUT | `/api/salidas/{id}/detalles/{detalleId}` | Cliente propietario; reemplaza cantidad; 200 |
+| DELETE | `/api/salidas/{id}/detalles/{detalleId}` | Cliente propietario; quita físicamente un detalle en borrador; 204 |
+| POST | `/api/salidas/{id}/confirmar-cliente` | Cliente propietario; solicita la salida y bloquea detalles; 200 |
+| POST | `/api/salidas/{id}/confirmar` | Administrador o Empleado; confirma y descuenta stock una vez; 200 |
+| DELETE | `/api/salidas/{id}` | Cliente propietario; borrado lógico antes de confirmación operativa; 204 |
+
+No hay PUT del encabezado. El cliente recibe 404 al intentar leer o modificar una
+salida ajena, incluso sus detalles; no puede ampliar su listado con clienteId.
+Administrador y Empleado consultan todas las salidas activas y sus detalles, pero
+no crean ni modifican carritos de clientes. Los actores salen del JWT; no se
+aceptan desde los JSON de encabezado/detalle. Las confirmaciones no enlazan un
+body: un JSON adicional no decide actor, cantidades ni estados.
+
+SalidaRequest solo admite Observaciones, opcional, máximo 1000, recortada o null.
+DetalleSalidaCreateRequest exige ProductoId y Cantidad positivos; Update solo
+Cantidad. Campos desconocidos se rechazan, incluidos precio, descuento, cliente,
+confirmador y estado. Cantidad cero/negativa no elimina: requiere DELETE.
+Puede haber varios carritos por cliente; no se impone un único carrito abierto.
+
+Un producto ocupa un solo detalle por salida (índice único conservado). POST sobre
+un producto existente reemplaza su cantidad, conserva su Id, precio y descuento,
+y devuelve 200; no suma ni duplica filas. Al agregar por primera vez se captura el
+precio actual de Producto y se fija DescAplicado en 0. El cliente no asigna precios
+ni descuentos. Editar cantidades o confirmar no recalcula el precio histórico.
+Quitar y volver a agregar captura un precio nuevo. Subtotal y Total se calculan
+igual que en ingresos: redondeo por detalle AwayFromZero a dos decimales y suma de
+subtotales, con límites decimal(18,2). No hay columnas nuevas para importes.
+Los descuentos históricos válidos se conservan; no se agrega edición de descuentos.
+
+Crear, editar y confirmar por cliente no reserva ni descuenta existencias; se
+permite solicitar más unidades que el stock actual. Ambas confirmaciones exigen
+al menos un detalle y productos activos. Solicitar bloquea altas, cambios y bajas
+de detalles. Repetir cualquiera de las confirmaciones devuelve 409.
+
+La confirmación operativa exige cliente activo y consistente, solicitud previa y
+estado pendiente. Usa transacción Serializable, actualización sin cambio del
+encabezado para bloquearlo y condiciones de estado/stock con comprobación de filas
+afectadas. Actualiza productos por Id ascendente, exigiendo Stock >= Cantidad.
+Cualquier producto sin stock, eliminado o fallo intermedio revierte estado, actor,
+fecha y todos los descuentos de stock. No hay confirmación parcial ni stock negativo.
+Las escrituras revalidan el perfil activo del actor dentro de la transacción.
+Los conflictos SQL Server 1205/1222 se devuelven como 409 para reintentar.
+
+DELETE del encabezado antes de confirmar operativamente conserva detalles y estados
+históricos, sin mover stock, incluso si ya lo solicitó el cliente. Repetir DELETE
+retorna 404. Una salida confirmada operativamente devuelve 409 al intentar eliminarla;
+no se incorpora cancelación ni reposición posterior. Las consultas conservan los
+históricos de productos, clientes o confirmadores eliminados, sin exponer salidas
+eliminadas. Los movimientos de productos existentes incluyen las salidas confirmadas.
+
+El listado valida page positivo, pageSize 1..100, desplazamiento dentro de int,
+identificadores de filtro positivos y desde <= hasta. Orden Fecha/Id descendente.
+ProductoId, ClienteId y fechas se combinan con la propiedad obligatoria del cliente.
+Una página fuera del resultado es vacía. Se elimina el servicio provisional
+MovimientoService y su respuesta 501; SalidaService gestiona el flujo completo.
 
 ## 12 Entorno y configuración
 
@@ -831,12 +890,21 @@ La cadena nueva no convierte datos de esa base anterior. No aplicarla sobre el
 historial antiguo, aunque el script sea idempotente. No borrar ni reiniciar bases
 para resolver diferencias sin autorización.
 
-Actualmente hay 13 migraciones: las once iniciales y estas dos del ajuste de CUIL:
+Actualmente hay 14 migraciones: las once iniciales, dos de CUIL y una de Salida:
 
 | Migración | Cambio real |
 | --- | --- |
 | `20261026210457_CuilUnicoClientes` | CUITNormalizado calculado en Usuarios e índice único filtrado por rol Cliente |
 | `20261026210619_CuilUnicoProveedores` | CUITNormalizado calculado en Proveedores e índice único sin filtro |
+| `20261027010400_ConfirmadorUsuarioSalida` | Renombra EmpleadoId a UsuarioConfirmacionId y referencia Usuarios; actualiza índice y restricción de confirmación |
+
+La migración del paso 11 conserva los valores existentes: Empleado.Id comparte
+clave con Usuario.Id. No elimina ni recrea registros de salidas. El modelo y la API
+requieren esta migración antes de usarse juntos. No se aplicó a bases del usuario.
+La reversión Down vuelve a exigir FK a Empleados: no es compatible con salidas
+confirmadas por administradores sin perfil Empleado; no debe ejecutarse sin revisar
+esos datos y acordar cómo conservar su historial. No se borran ni reasignan actores
+automáticamente para permitir esa reversión.
 
 No hubo cambios de esquema en los pasos 7, 8, 9.1, 9.2, 9.3, 9.4, 9.5 ni 10; no se crearon migraciones
 vacías. El snapshot vigente está en `TPN°5-Movil/Migrations`, para que lo descubra
@@ -952,6 +1020,7 @@ ni debe interpretarse como una suite vigente.
 | Paso 9.4 | 119 pruebas, 0 fallidas y 0 omitidas; compilación sin advertencias | Funcionales en SQLite; sin pruebas funcionales en SQL Server ni migraciones nuevas |
 | Paso 9.5 | 165 pruebas, 0 fallidas y 0 omitidas; compilación sin advertencias | Funcionales en SQLite y filesystem temporal en Windows; sin pruebas funcionales en SQL Server/Linux; suite retirada después por instrucción del usuario |
 | Paso 10 | 242 comprobaciones temporales aprobadas; compilación sin errores ni advertencias | HTTP, fallos y concurrencia en SQLite aislada; adaptación del descuento para ese proveedor; sin validación funcional en SQL Server ni pruebas añadidas al repositorio |
+| Paso 11 | 361 comprobaciones temporales aprobadas; compilación sin errores ni advertencias; 14 migraciones y sin cambios pendientes de modelo | HTTP, fallos y concurrencia en SQLite aislada; SQL de migración generado/revisado sin ejecutarlo; sin validación funcional en SQL Server ni pruebas añadidas al repositorio |
 
 Los números son totales de la suite en cada entrega, no cantidades acumulables.
 Durante el paso 8 se aplicaron las once migraciones iniciales a bases nuevas de
@@ -1023,6 +1092,37 @@ tools/Schema confirmó once entidades y trece migraciones, y dotnet-ef 9.0.11
 confirmó que no hay cambios pendientes de modelo, sin conectar a bases. No se
 aplicaron migraciones ni se modificó una base personal.
 
+En el paso 11 se ejecutaron 361 comprobaciones temporales externas al repositorio.
+Se usaron clientes HTTP con JWT de inicio de sesión real, webroot y archivos SQLite
+exclusivos por escenario. Se verificaron permisos por ruta, propiedad y ocultación
+de carritos ajenos, paginado/filtros, rechazo de identidades/precios/descuentos en
+JSON, detalle único, reemplazo de cantidad y precio histórico, límites monetarios,
+redondeo, bloqueo al solicitar, confirmación por ambos roles desde JWT, eliminación
+previa a confirmación y persistencia histórica tras bajas lógicas.
+
+Se verificó que solicitar no reserve stock, que la falta de un segundo producto
+revierta el primero y que se pueda reintentar tras reponer existencias. Un fallo
+inyectado al actualizar el segundo producto revirtió estado y todo el stock; una
+respuesta perdida después de commit conservó lo confirmado y rechazó un segundo
+descuento. Las carreras incluyeron Administrador/Empleado sobre la misma salida,
+confirmación/eliminación, edición/solicitud, dos solicitudes, dos altas del mismo
+producto y pedidos distintos compitiendo por existencias insuficientes. Se comprobó
+el índice único y la interacción con ingresos: no se permite revertir un ingreso
+cuyo stock ya consumió una salida.
+
+Solo el contexto temporal de SQLite convierte DescAplicado de DetalleSalida y
+DetalleIngreso a REAL para evitar comparaciones lexicográficas del CHECK con
+columnas decimal representadas como TEXT. La API mantiene decimal, sus precisiones
+y sus cálculos. Esta adaptación no valida las características de bloqueo de SQL
+Server. No se ejecutó la antigua suite retirada ni se afirmó una regresión integral.
+La compilación quedó con 0 errores y 0 advertencias; tools/Schema confirmó once
+entidades, catorce migraciones, FK del confirmador a Usuario y Restrict sin cascadas.
+Dotnet-ef 9.0.11 confirmó ausencia de cambios pendientes del modelo. El SQL generado
+renombra columna e índice, actualiza CHECK y FK dentro de una transacción y no
+borra registros. No se ejecutó la migración ni se conectó a bases personales o a
+SQL Server para validación funcional. El rollback a FK Empleados requiere revisar
+previamente las confirmaciones de administradores, como explica la sección 13.1.
+
 ## 15 Plan de trabajo y alcance por autorizar
 
 El plan original se mantiene con los siguientes estados:
@@ -1043,8 +1143,8 @@ El plan original se mantiene con los siguientes estados:
 | 9.3 | CRUD de clientes | Implementado e integrado en PR #8 |
 | 9.4 | CRUD de proveedores | Implementado e integrado en PR #9 |
 | 9.5 | CRUD de productos e imágenes | Implementado e integrado en PR #10 |
-| 10 | Flujo completo de ingresos y stock | Implementado y publicado en PR #11; pendiente de integración |
-| 11 | Flujo completo de salidas y stock | Próximo bloque; alcance por autorizar |
+| 10 | Flujo completo de ingresos y stock | Integrado en PR #11 |
+| 11 | Flujo completo de salidas y stock | Implementado y publicado en PR #12; pendiente de integración |
 | 12 | Validación integral y entrega | Pendiente |
 
 Los pasos 2 al 6 se revisaron después sin duplicar entidades ni migraciones. Que
@@ -1084,15 +1184,22 @@ verificaciones temporales. Posteriormente autorizó el commit y la subida de est
 entrega para revisión mediante PR. El merge queda a su cargo y no se autoriza
 aplicar migraciones.
 
-Antes del paso 11 revisar carrito propio del Cliente, identidades JWT, detalles
-únicos por producto, confirmación del Cliente y confirmación operativa, descuento
-atómico de stock y consultas/históricos. Resolver primero cómo podrá confirmar
-Administrador sin perfil Empleado y sin inventar una FK: es la duda señalada en
-la sección 5.3. Presentar alcance y obtener autorización antes de editar.
+El usuario confirmó explícitamente que tanto Administrador como Empleado deben
+confirmar salidas y autorizó el alcance concreto del paso 11: carrito propio,
+detalle único, precio capturado y descuento inicial cero, solicitud que bloquea
+detalles, descuento atómico al confirmar y eliminación previa a confirmación
+operativa. Autorizó sustituir EmpleadoId por UsuarioConfirmacionId con FK a Usuario,
+generar la migración correspondiente y actualizar esta documentación. Se modifican
+Salida, su configuración, la navegación inversa de Empleado, DTOs, controlador,
+registro de dependencias y herramientas de inspección; se reemplaza MovimientoService
+por SalidaService. Se permiten verificaciones temporales externas al repositorio.
+Posteriormente el usuario autorizó el commit y la subida de esta entrega a una
+rama del proyecto para revisión mediante PR. El merge queda a su cargo y no se
+autoriza aplicar la migración.
 
 ## 16 Historial de entregas
 
-Estado verificado al preparar esta versión: PR #1 al #10 integrados; PR #11 abierto.
+Estado verificado al publicar esta entrega: PR #1 al #11 integrados; PR #12 abierto.
 Los hashes de la columna Commit identifican el trabajo de cada rama.
 
 | Entrega | Rama | Commit | PR |
@@ -1107,13 +1214,15 @@ Los hashes de la columna Commit identifican el trabajo de cada rama.
 | Clientes | `codex/paso-9-3-clientes` | `e1a12b7` y `535e869` | [#8](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/8) |
 | Proveedores | `codex/paso-9-4-proveedores` | `ad4267a` y `2a43284` | [#9](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/9) |
 | Productos e imágenes y retiro de pruebas | `codex/paso-9-5-productos-imagenes` | `9929183` y `c5f20cc` | [#10](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/10) |
-| Ingresos y stock | `codex/paso-10-ingresos-stock` | `6f4150e` inicial | [#11 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/11) |
+| Ingresos y stock | `codex/paso-10-ingresos-stock` | `6f4150e` y `016d5db` | [#11 integrado](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/11) |
+| Salidas, carrito y stock | `codex/paso-11-salidas-stock` | `e078981` inicial | [#12 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/12) |
 
 El PR #10 ya está integrado mediante `ec5f3ef`, comprobado al iniciar el paso 10.
 El paso 10 se publicó en `codex/paso-10-ingresos-stock`, basada en `origin/main`
-con ese merge, mediante el commit inicial `6f4150e`. El PR #11 queda abierto para
-revisión; el merge sigue a cargo del usuario. Esta actualización del historial
-se publica como seguimiento documental en el mismo PR.
+con ese merge, mediante el commit inicial `6f4150e`. El usuario integró el PR #11 mediante `6e35de1`, verificado antes de crear la rama
+local `codex/paso-11-salidas-stock`. El paso 11 se publicó con el commit inicial
+`e078981` mediante el PR #12. Esta actualización documental se publica en la misma
+rama como seguimiento de la entrega. El merge sigue a cargo del usuario.
 
 ## 17 Fuentes originales y decisiones que las reemplazan
 
@@ -1160,7 +1269,7 @@ el comportamiento de la API reestructurada. Estas diferencias están resueltas:
 | Registro con respuesta 200 | Registro transaccional con respuesta 201 |
 | Lecturas generales de categorías para cualquier cuenta | Solo catálogo mínimo para los tres roles; administración y detalle exclusivos de Administrador |
 | Proveedor obligatorio y directo en Producto | Proveedor a través de ingresos; Producto solo referencia Categoria |
-| Crear ingreso/salida altera stock inmediatamente | Flujo por encabezados, detalles y confirmaciones, todavía pendiente |
+| Crear ingreso/salida altera stock inmediatamente | Pasos 10 y 11: stock cambia solo al confirmar operativamente |
 | Impedir eliminar categorías, proveedores, clientes o productos por tener relaciones | Soft delete conservando históricos; ingresos confirmados requieren reversión atómica según su regla propia |
 | Usuario con Activo editable | Usuario.Eliminado, sin restauración ni cambio de rol en edición común |
 | CRUD de clientes o carga de imágenes de la versión anterior | Los pasos 9.3 y 9.5 completan clientes e imágenes con los contratos actuales |

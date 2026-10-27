@@ -371,9 +371,6 @@ namespace TPN_5_MOVIL.Migrations
                     b.Property<bool>("Eliminado")
                         .HasColumnType("bit");
 
-                    b.Property<int?>("EmpleadoId")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("Fecha")
                         .HasColumnType("datetime2");
 
@@ -386,19 +383,22 @@ namespace TPN_5_MOVIL.Migrations
                     b.Property<string>("Observaciones")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("UsuarioConfirmacionId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ClienteId");
 
-                    b.HasIndex("EmpleadoId");
-
                     b.HasIndex("Fecha");
+
+                    b.HasIndex("UsuarioConfirmacionId");
 
                     b.ToTable("Salidas", null, t =>
                         {
                             t.HasCheckConstraint("CK_Salida_Cliente", "([ConfirmarXCliente] = 0 AND [FechaConfirmacionCliente] IS NULL) OR ([ConfirmarXCliente] = 1 AND [FechaConfirmacionCliente] IS NOT NULL)");
 
-                            t.HasCheckConstraint("CK_Salida_Empleado", "([ConfirmarXEmpleado] = 0 AND [EmpleadoId] IS NULL AND [FechaConfirmacionEmpleado] IS NULL) OR ([ConfirmarXEmpleado] = 1 AND [ConfirmarXCliente] = 1 AND [EmpleadoId] IS NOT NULL AND [FechaConfirmacionEmpleado] IS NOT NULL)");
+                            t.HasCheckConstraint("CK_Salida_Empleado", "([ConfirmarXEmpleado] = 0 AND [UsuarioConfirmacionId] IS NULL AND [FechaConfirmacionEmpleado] IS NULL) OR ([ConfirmarXEmpleado] = 1 AND [ConfirmarXCliente] = 1 AND [UsuarioConfirmacionId] IS NOT NULL AND [FechaConfirmacionEmpleado] IS NOT NULL)");
                         });
                 });
 
@@ -581,14 +581,14 @@ namespace TPN_5_MOVIL.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("TPN_5_MOVIL.Entities.Empleado", "Empleado")
-                        .WithMany("SalidasConfirmadas")
-                        .HasForeignKey("EmpleadoId")
+                    b.HasOne("TPN_5_MOVIL.Entities.Usuario", "UsuarioConfirmacion")
+                        .WithMany()
+                        .HasForeignKey("UsuarioConfirmacionId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Cliente");
 
-                    b.Navigation("Empleado");
+                    b.Navigation("UsuarioConfirmacion");
                 });
 
             modelBuilder.Entity("TPN_5_MOVIL.Entities.Categoria", b =>
@@ -606,8 +606,6 @@ namespace TPN_5_MOVIL.Migrations
                     b.Navigation("Ingresos");
 
                     b.Navigation("IngresosConfirmados");
-
-                    b.Navigation("SalidasConfirmadas");
                 });
 
             modelBuilder.Entity("TPN_5_MOVIL.Entities.Ingreso", b =>

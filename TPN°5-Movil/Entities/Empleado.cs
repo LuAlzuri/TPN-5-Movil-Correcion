@@ -7,5 +7,4 @@ public class Empleado
     public Usuario Usuario { get; set; } = null!;
     public List<Ingreso> Ingresos { get; set; } = new();
     public List<Ingreso> IngresosConfirmados { get; set; } = new();
-    public List<Salida> SalidasConfirmadas { get; set; } = new();
 }
