@@ -18,7 +18,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 var jwt = JwtSettings.Load(builder.Configuration);
 builder.Services.AddSingleton(jwt);
 builder.Services.AddScoped<AuthService>();
-builder.Services.AddScoped<MovimientoService>();
+builder.Services.AddScoped<SalidaService>();
 builder.Services.AddScoped<IngresoService>();
 builder.Services.AddScoped<ImagenProductoService>();
 builder.Services.AddSingleton<IAlmacenImagenes, AlmacenImagenes>();

@@ -17,7 +17,9 @@ foreach (var type in new[] { typeof(Empleado), typeof(Cliente) })
 }
 Check(model.FindEntityType(typeof(Imagen))!.GetIndexes().Any(i => i.IsUnique && i.Properties.Single().Name == "ProductoId"), "Una imagen por producto");
 Check(model.FindEntityType(typeof(DetalleSalida))!.GetIndexes().Any(i => i.IsUnique && i.Properties.Select(p => p.Name).SequenceEqual(new[] { "SalidaId", "ProductoId" })), "Producto unico por carrito");
-Check(model.FindEntityType(typeof(Salida))!.FindProperty("EmpleadoId")!.IsNullable, "Empleado de salida opcional antes de confirmar");
+Check(model.FindEntityType(typeof(Salida))!.FindProperty("UsuarioConfirmacionId")!.IsNullable, "Confirmador de salida opcional antes de confirmar");
+Check(model.FindEntityType(typeof(Salida))!.GetForeignKeys().Any(f => f.PrincipalEntityType.ClrType == typeof(Usuario)
+    && f.Properties.Single().Name == "UsuarioConfirmacionId"), "Confirmador de salida vinculado a Usuario");
 Check(model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()).All(f => f.DeleteBehavior == DeleteBehavior.Restrict), "Sin cascadas de eliminacion");
 Check(db.Productos.ToQueryString().Contains("Eliminado"), "Filtro de productos traducido a SQL");
 Check(!db.Productos.IgnoreQueryFilters().ToQueryString().Contains("WHERE"), "Auditoria puede omitir filtros");
@@ -26,4 +28,4 @@ Check(model.FindEntityType(typeof(Usuario))!.GetIndexes().Any(i => i.IsUnique
     && i.Properties.Single().Name == "CUITNormalizado" && i.GetFilter() == "[Rol] = 'Cliente'"), "CUIT unico solo entre Clientes");
 Check(model.FindEntityType(typeof(Proveedor))!.GetIndexes().Any(i => i.IsUnique
     && i.Properties.Single().Name == "CUITNormalizado"), "CUIT unico entre Proveedores sin guiones ni espacios");
-Check(db.Database.GetMigrations().Count() == 13, "13 migraciones descubiertas");
+Check(db.Database.GetMigrations().Count() == 14, "14 migraciones descubiertas");

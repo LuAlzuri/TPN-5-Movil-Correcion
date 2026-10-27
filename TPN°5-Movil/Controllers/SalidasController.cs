@@ -1,47 +1,81 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TPN_5_MOVIL.Data;
 using TPN_5_MOVIL.DTOs;
 using TPN_5_MOVIL.Entities;
+using TPN_5_MOVIL.Security;
 using TPN_5_MOVIL.Services;
 
 namespace TPN_5_MOVIL.Controllers;
 
 [ApiController]
 [Route("api/salidas")]
-// Client ownership queries are introduced with the complete checkout workflow.
-[Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
-public class SalidasController(AppDbContext db, MovimientoService movimientos) : ControllerBase
+[Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado + "," + Usuario.RolCliente)]
+public class SalidasController(SalidaService salidas) : ControllerBase
 {
+    private int? PropietarioId => User.IsInRole(Usuario.RolCliente) ? User.ObtenerClienteId() : null;
+
     [HttpGet]
     public async Task<ActionResult<PaginatedResult<SalidaResponse>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 10,
         [FromQuery] int? productoId = null, [FromQuery] int? clienteId = null,
-        [FromQuery] DateTime? desde = null, [FromQuery] DateTime? hasta = null)
-    {
-        var query = db.Salidas.AsNoTracking();
-        if (productoId.HasValue) query = query.Where(x => x.Detalles.Any(d => d.ProductoId == productoId.Value));
-        if (clienteId.HasValue) query = query.Where(x => x.ClienteId == clienteId.Value);
-        if (desde.HasValue) query = query.Where(x => x.Fecha >= desde.Value);
-        if (hasta.HasValue) query = query.Where(x => x.Fecha <= hasta.Value);
-        return Ok(await PaginatedResult<SalidaResponse>.CreateAsync(
-            query.OrderByDescending(x => x.Fecha).ThenByDescending(x => x.Id).Select(x => new SalidaResponse(x.Id, x.ClienteId, x.EmpleadoId, x.Fecha, x.Observaciones, x.ConfirmarXCliente, x.ConfirmarXEmpleado, x.FechaConfirmacionCliente, x.FechaConfirmacionEmpleado,
-                x.Detalles.OrderBy(d => d.Id).Select(d => new DetalleSalidaResponse(d.Id, d.ProductoId, d.Cantidad, d.PrecioUnitario, d.DescAplicado)).ToList())), page, pageSize));
-    }
+        [FromQuery] DateTime? desde = null, [FromQuery] DateTime? hasta = null,
+        CancellationToken cancellationToken = default) =>
+        Ok(await salidas.ListarAsync(PropietarioId, page, pageSize, productoId, clienteId, desde, hasta, cancellationToken));
 
     [HttpGet("{id:int}")]
-    public async Task<ActionResult<SalidaResponse>> GetById(int id)
-    {
-        var result = await db.Salidas.AsNoTracking().Where(x => x.Id == id).Select(x => new SalidaResponse(x.Id, x.ClienteId, x.EmpleadoId, x.Fecha, x.Observaciones, x.ConfirmarXCliente, x.ConfirmarXEmpleado, x.FechaConfirmacionCliente, x.FechaConfirmacionEmpleado,
-                x.Detalles.OrderBy(d => d.Id).Select(d => new DetalleSalidaResponse(d.Id, d.ProductoId, d.Cantidad, d.PrecioUnitario, d.DescAplicado)).ToList())).FirstOrDefaultAsync();
-        return result is null ? NotFound() : Ok(result);
-    }
+    public async Task<ActionResult<SalidaResponse>> GetById(int id, CancellationToken cancellationToken) =>
+        Ok(await salidas.ConsultarAsync(id, PropietarioId, cancellationToken));
+
+    [HttpGet("{id:int}/detalles/{detalleId:int}")]
+    public async Task<ActionResult<DetalleSalidaResponse>> GetDetalle(int id, int detalleId, CancellationToken cancellationToken) =>
+        Ok(await salidas.ConsultarDetalleAsync(id, detalleId, PropietarioId, cancellationToken));
 
     [HttpPost]
-    public async Task<ActionResult<SalidaResponse>> Create([FromBody] SalidaRequest request)
+    [Authorize(Roles = Usuario.RolCliente)]
+    public async Task<ActionResult<SalidaResponse>> Create([FromBody] SalidaRequest request, CancellationToken cancellationToken)
     {
-        var result = await movimientos.CrearSalidaAsync(request);
+        var result = await salidas.CrearAsync(request, User.ObtenerClienteId(), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+    }
+
+    [HttpPost("{id:int}/detalles")]
+    [Authorize(Roles = Usuario.RolCliente)]
+    public async Task<ActionResult<DetalleSalidaResponse>> AgregarDetalle(int id, [FromBody] DetalleSalidaCreateRequest request,
+        CancellationToken cancellationToken)
+    {
+        var (detalle, creado) = await salidas.AgregarDetalleAsync(id, request, User.ObtenerClienteId(), cancellationToken);
+        return creado ? CreatedAtAction(nameof(GetDetalle), new { id, detalleId = detalle.Id }, detalle) : Ok(detalle);
+    }
+
+    [HttpPut("{id:int}/detalles/{detalleId:int}")]
+    [Authorize(Roles = Usuario.RolCliente)]
+    public async Task<ActionResult<DetalleSalidaResponse>> EditarDetalle(int id, int detalleId,
+        [FromBody] DetalleSalidaUpdateRequest request, CancellationToken cancellationToken) =>
+        Ok(await salidas.EditarDetalleAsync(id, detalleId, request, User.ObtenerClienteId(), cancellationToken));
+
+    [HttpDelete("{id:int}/detalles/{detalleId:int}")]
+    [Authorize(Roles = Usuario.RolCliente)]
+    public async Task<IActionResult> QuitarDetalle(int id, int detalleId, CancellationToken cancellationToken)
+    {
+        await salidas.QuitarDetalleAsync(id, detalleId, User.ObtenerClienteId(), cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPost("{id:int}/confirmar-cliente")]
+    [Authorize(Roles = Usuario.RolCliente)]
+    public async Task<ActionResult<SalidaResponse>> ConfirmarCliente(int id, CancellationToken cancellationToken) =>
+        Ok(await salidas.ConfirmarClienteAsync(id, User.ObtenerClienteId(), cancellationToken));
+
+    [HttpPost("{id:int}/confirmar")]
+    [Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
+    public async Task<ActionResult<SalidaResponse>> Confirmar(int id, CancellationToken cancellationToken) =>
+        Ok(await salidas.ConfirmarAsync(id, User.ObtenerUsuarioId(), cancellationToken));
+
+    [HttpDelete("{id:int}")]
+    [Authorize(Roles = Usuario.RolCliente)]
+    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
+    {
+        await salidas.EliminarAsync(id, User.ObtenerClienteId(), cancellationToken);
+        return NoContent();
     }
 }
