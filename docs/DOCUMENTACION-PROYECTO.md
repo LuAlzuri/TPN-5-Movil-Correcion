@@ -59,9 +59,10 @@ El bloque **12.1, completar y corregir Usuarios**, está autorizado, implementad
 y publicado en `codex/paso-12-1-usuarios` mediante el PR #13: 293 comprobaciones
 temporales aprobadas y compilación sin errores ni advertencias. El PR #13 está integrado mediante `7269ef6`.
 El usuario autorizó el bloque **12.2 de consultas administrativas de históricos y
-eliminados**. Está implementado y validado localmente en `codex/paso-12-2-auditoria`:
+eliminados**. Está publicado en `codex/paso-12-2-auditoria` mediante el PR #14:
 494 comprobaciones temporales aprobadas, compilación sin errores ni advertencias
-y traducción a SQL Server comprobada sin conexión. No tiene commits ni PR. La
+y traducción a SQL Server comprobada sin conexión. El PR #14 está abierto para
+revisión e integración por el usuario. La
 validación funcional integral en SQL Server y la preparación de entrega siguen
 pendientes de su propio alcance y autorización.
 
@@ -79,7 +80,7 @@ pendientes de su propio alcance y autorización.
 | Ingresos y stock | Paso 10 integrado en PR #11 |
 | Salidas, carrito y stock | Paso 11 integrado en PR #12 |
 | CRUD general de usuarios | Bloque 12.1 integrado en PR #13 |
-| Consultas de históricos y eliminados | Bloque 12.2 implementado y validado localmente; sin publicar |
+| Consultas de históricos y eliminados | Bloque 12.2 publicado en PR #14; pendiente de integración |
 | Base personal del usuario | No se verificó ni migró; no asumir que está preparada |
 
 POST /api/usuarios deja de devolver 501 en el bloque 12.1. Los tres tipos de cuenta
@@ -1349,7 +1350,7 @@ El plan original se mantiene con los siguientes estados:
 | 11 | Flujo completo de salidas y stock | Integrado en PR #12 |
 | 12 | Validación integral y entrega | En curso por bloques; no completado |
 | 12.1 | Completar y corregir Usuarios | Integrado en PR #13 |
-| 12.2 | Consultas administrativas de históricos y eliminados | Implementado y validado localmente; sin publicar |
+| 12.2 | Consultas administrativas de históricos y eliminados | Publicado en PR #14; pendiente de integración |
 | 12.3 propuesto | Validación integral en SQL Server y preparación de entrega | Pendiente de alcance y autorización |
 
 Los pasos 2 al 6 se revisaron después sin duplicar entidades ni migraciones. Que
@@ -1428,7 +1429,7 @@ escrituras de auditoría.
 
 ## 16 Historial de entregas
 
-Estado verificado al iniciar el bloque 12.2: PR #1 al #13 integrados; bloque 12.2 local sin publicar.
+Estado verificado al publicar el bloque 12.2: PR #1 al #13 integrados; PR #14 abierto.
 Los hashes de la columna Commit identifican el trabajo de cada rama.
 
 | Entrega | Rama | Commit | PR |
@@ -1446,6 +1447,7 @@ Los hashes de la columna Commit identifican el trabajo de cada rama.
 | Ingresos y stock | `codex/paso-10-ingresos-stock` | `6f4150e` y `016d5db` | [#11 integrado](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/11) |
 | Salidas, carrito y stock | `codex/paso-11-salidas-stock` | `e078981` inicial | [#12 integrado](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/12) |
 | Usuarios | `codex/paso-12-1-usuarios` | `2783113` inicial | [#13 integrado](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/13) |
+| Consultas de auditoría e históricos | `codex/paso-12-2-auditoria` | `20ee235` inicial | [#14 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/14) |
 
 El PR #10 ya está integrado mediante `ec5f3ef`, comprobado al iniciar el paso 10.
 El paso 10 se publicó en `codex/paso-10-ingresos-stock`, basada en `origin/main`
@@ -1457,8 +1459,9 @@ rama como seguimiento de la entrega. El usuario integró el PR #12 mediante
 de ese main actualizado. El bloque 12.1 se publicó con el commit inicial `2783113`
 mediante el PR #13. Esta actualización documental se publica como seguimiento en
 la misma rama. El usuario integró el PR #13 mediante `7269ef6`, comprobado al
-iniciar el bloque 12.2. Este bloque parte de ese main actualizado y todavía no
-tiene commits ni PR.
+iniciar el bloque 12.2. Este bloque parte de ese main actualizado y se publicó
+con el commit inicial `20ee235` mediante el PR #14. Esta actualización documental
+se publica como seguimiento en la misma rama. El merge queda a cargo del usuario.
 
 ## 17 Fuentes originales y decisiones que las reemplazan
 
