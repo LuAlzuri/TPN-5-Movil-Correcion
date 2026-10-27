@@ -37,18 +37,20 @@ La última suite ejecutada aprobó 165 pruebas en SQLite aislada, con 0 fallidas
 exitosas: se retiraron la carpeta tests y su proyecto de la solución. Los resultados
 se conservan como evidencia histórica, sin una suite versionada actual.
 El registro transaccional, la autenticación y los CRUD de
-categorías, empleados, clientes y proveedores están implementados. El paso 9.5 de
-productos e imágenes está publicado en el PR #10, abierto para revisión y pendiente
-de integración por el usuario. Los resultados figuran en la sección 14.
+categorías, empleados, clientes, proveedores y productos/imágenes están implementados.
+El paso 10 de ingresos y stock está publicado en el PR #11 y validado mediante
+242 comprobaciones temporales, sin volver a incorporar pruebas al repositorio.
+El PR #11 está abierto para revisión y pendiente de integración por el usuario.
+Los resultados figuran en la sección 14.
 La unicidad de CUIT/CUIL entre clientes y entre proveedores tiene migraciones propias.
 
-Los PR del 1 al 9 están integrados en `main`, según las comprobaciones realizadas
-al iniciar el paso 9.5. El último es el PR #9, integrado mediante
-`c81dad3`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
+Los PR del 1 al 10 están integrados en `main`, según las comprobaciones realizadas
+al iniciar el paso 10. El último es el PR #10, integrado mediante
+`ec5f3ef`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
 automáticamente por estar escrito aquí.
 
 La API todavía no está terminada funcionalmente. El próximo bloque es el **paso
-10, flujo completo de ingresos y stock**, pendiente de revisión de alcance
+11, flujo completo de salidas y carrito**, pendiente de revisión de alcance
 y autorización. El flujo de inventario continúa pendiente de sus propios bloques.
 
 | Área | Estado vigente |
@@ -61,8 +63,8 @@ y autorización. El flujo de inventario continúa pendiente de sus propios bloqu
 | CUIT/CUIL único en clientes y proveedores | Implementado; dos migraciones nuevas |
 | CRUD completo de clientes | Paso 9.3 integrado en PR #8 |
 | CRUD completo de proveedores | Paso 9.4 integrado en PR #9 |
-| Productos e imágenes | Paso 9.5 publicado en PR #10; pendiente de integración |
-| Ingresos y stock | Flujo funcional pendiente |
+| Productos e imágenes | Paso 9.5 integrado en PR #10 |
+| Ingresos y stock | Paso 10 publicado en PR #11; pendiente de integración |
 | Salidas, carrito y stock | Flujo funcional pendiente |
 | Auditoría completa e históricos autorizados | Pendientes |
 | Base personal del usuario | No se verificó ni migró; no asumir que está preparada |
@@ -71,7 +73,7 @@ Los endpoints temporalmente no disponibles devuelven `501` después de los
 controles de autorización y validación de entrada que correspondan:
 
 - `POST /api/usuarios`.
-- Creación de ingresos y salidas mediante sus servicios actuales.
+- Creación de salidas mediante su servicio actual.
 
 Los tres tipos de cuenta pueden crearse mediante `POST /api/auth/register`,
 exclusivo de Administrador. Los empleados y clientes también pueden crearse
@@ -200,20 +202,24 @@ No se acordó acceso anónimo al catálogo.
 
 ## 5 Reglas de stock y movimientos pendientes
 
-Las entidades y restricciones existen, pero los flujos de esta sección todavía
-deben implementarse y probarse. No interpretar el diseño como funcionalidad lista.
+El paso 10 implementa el flujo de ingresos de esta sección. Las reglas de salidas
+y carrito continúan como diseño pendiente de implementación y autorización.
 
 ### 5.1 Reglas comunes
 
 - Stock mínimo 0: se permite agotarlo, nunca dejarlo negativo ni vender sin disponibilidad.
-- Cantidad de cada detalle: mínimo 1. La cantidad total solicitada de un producto
-  no puede superar el stock disponible.
+- Cantidad de cada detalle: mínimo 1. En ventas/salidas, la cantidad total solicitada
+  de un producto no puede superar el stock disponible. Los ingresos pueden crearse
+  con stock actual 0 y lo incrementan al confirmar, sin exceder Int32.
 - DescAplicado es un porcentaje de 0 a 100.
 - Guardar PrecioUnitario en el detalle para conservar el histórico aunque cambie
   el precio del producto.
 - Subtotal previsto: `Cantidad × PrecioUnitario × (1 − DescAplicado / 100)`.
-  El total del encabezado es la suma de subtotales. Se requiere redondeo monetario
-  uniforme; su criterio concreto debe quedar documentado al implementar el flujo.
+  El total del encabezado es la suma de subtotales ya redondeados. Para ingresos
+  se acordó redondear cada subtotal a dos decimales con MidpointRounding.AwayFromZero.
+  Los precios unitarios se capturan desde Producto al agregar el detalle y se
+  conservan al editar cantidad/descuento. Subtotal y total no exceden decimal(18,2)
+  en las nuevas escrituras. Los DTOs exponen estos cálculos sin columnas nuevas.
 - Importes configurados como `decimal(18,2)` y descuentos como `decimal(5,2)`.
 - Registrar fecha, proveedor o cliente y empleado según corresponda.
 - Las operaciones que alteren stock requieren transacciones explícitas
@@ -223,7 +229,7 @@ deben implementarse y probarse. No interpretar el diseño como funcionalidad lis
 
 ### 5.2 Ingresos
 
-El empleado crea el encabezado sin confirmar. El encabezado no se edita. Sus
+Flujo implementado en el paso 10. El empleado crea el encabezado sin confirmar. El encabezado no se edita. Sus
 detalles se agregan, modifican o eliminan únicamente mientras no esté confirmado.
 
 Confirmar un ingreso con detalles aumenta el stock una sola vez, dentro de una
@@ -554,8 +560,8 @@ Eliminar conserva ingresos, sus detalles y stock, incluso cuando el proveedor ti
 ingresos confirmados. El proveedor desaparece de listado, catálogo y consulta por
 ID; su edición o eliminación posterior devuelve 404. El catálogo y las consultas
 operativas ya no lo ofrecen para nuevas selecciones. La validación de proveedor
-activo al guardar un ingreso corresponde al paso 10: la creación de ingresos
-continúa temporalmente en 501 y no se implementa en este bloque.
+activo al crear y confirmar un ingreso está implementada en el paso 10. El borrado
+del proveedor no impide eliminar un borrador ni revertir un ingreso histórico.
 
 No se agregan endpoints de auditoría ni se cambia el modelo o el esquema. Los
 históricos completos siguen pendientes de sus propias consultas autorizadas.
@@ -654,20 +660,95 @@ y las bibliotecas nativas al desplegar; selección de paquetes según la
 [documentación oficial](https://github.com/mono/SkiaSharp/blob/main/documentation/dev/packages.md).
 No se cambian las once entidades, sus relaciones ni las trece migraciones.
 
-### 11.5 Ingresos y salidas
+### 11.5 Ingresos y stock implementados en el paso 10
 
-Las consultas actuales de ambos controladores son exclusivas de Administrador y
-Empleado. Los listados admiten productoId y desde/hasta, más proveedorId para
-ingresos o clienteId para salidas. Ordenan por Fecha e Id descendentes y paginan.
+| Método | Ruta | Permisos y comportamiento |
+| --- | --- | --- |
+| GET | `/api/ingresos` | Administrador y Empleado; listado paginado |
+| GET | `/api/ingresos/{id}` | Administrador y Empleado; encabezado, detalles y total |
+| GET | `/api/ingresos/{id}/detalles/{detalleId}` | Administrador y Empleado; detalle perteneciente al encabezado |
+| POST | `/api/ingresos` | Empleado; crea borrador y devuelve 201 con Location |
+| POST | `/api/ingresos/{id}/detalles` | Empleado; agrega detalle y devuelve 201 con Location |
+| PUT | `/api/ingresos/{id}/detalles/{detalleId}` | Empleado; cambia cantidad/descuento y devuelve 200 con detalle calculado |
+| DELETE | `/api/ingresos/{id}/detalles/{detalleId}` | Empleado; quita un detalle de borrador; 204 |
+| POST | `/api/ingresos/{id}/confirmar` | Empleado; confirma y suma stock; 200 con encabezado |
+| DELETE | `/api/ingresos/{id}` | Empleado; soft delete y reversión si corresponde; 204 |
 
-IngresoResponse y SalidaResponse exponen encabezado, estados, fechas y detalles.
-IngresoRequest recibe ProveedorId y Observaciones. SalidaRequest solo Observaciones:
-no se reciben ClienteId ni EmpleadoId para elegir la identidad operativa.
+No hay PUT del encabezado. El Administrador no hereda permisos de escritura;
+Cliente no accede a estas rutas. Un empleado activo puede operar sobre ingresos
+creados por otro empleado: se conservan creador y confirmador por separado.
+El ID operativo se obtiene del JWT mediante UsuarioAutenticado y se verifica
+nuevamente el perfil activo dentro de la transacción. No se toma de JSON.
 
-MovimientoService mantiene bloqueada la creación con 501. No se conserva la
-implementación anterior que modificaba stock al crear el movimiento. Las consultas
-de salidas propias del Cliente esperan la implementación del alcance por identidad.
-Las consultas temporales de Administrador no lo autorizan a crear ingresos.
+IngresoRequest admite únicamente ProveedorId positivo y Observaciones opcionales
+de hasta 1000 caracteres, recortadas y vacías como null. Fecha UTC, empleado creador,
+estado y fechas de confirmación son del servidor. El proveedor debe estar activo
+al crear. Un encabezado nuevo no tiene detalles, total 0 ni impacto sobre stock.
+
+DetalleIngresoCreateRequest admite ProductoId positivo, Cantidad obligatoria de
+1 a Int32.MaxValue y DescAplicado opcional (0 por defecto). El producto debe estar
+activo; su precio actual se copia como PrecioUnitario histórico. El descuento está
+entre 0 y 100 con hasta dos decimales. Editar solo recibe Cantidad y DescAplicado,
+sin cambiar ProductoId ni PrecioUnitario; omitir descuento lo establece en 0.
+Los DTOs rechazan propiedades desconocidas, incluyendo identidades, estados y
+precio aportado por el cliente. Las mismas reglas se validan en el servicio.
+
+Los detalles admiten varias filas de un mismo producto en un ingreso, a diferencia
+del carrito de salida. Pueden reflejar precios capturados en momentos distintos.
+Al confirmar/revertir se agrupan sus cantidades por producto, usando long para
+sumar y rechazando acumulados fuera de Int32. Se actualizan productos por ID
+ascendente para mantener un orden de bloqueo uniforme.
+
+DetalleIngresoResponse agrega Subtotal e IngresoResponse agrega Total a sus campos
+anteriores. Subtotal = Cantidad × PrecioUnitario × (1 − DescAplicado/100), redondeado
+a dos decimales con AwayFromZero. Total suma esos subtotales, no redondea primero
+la suma sin redondear. Los nuevos detalles y ediciones rechazan importes que
+excedan 9999999999999999.99; no se cambia esquema ni se persisten totales derivados.
+
+Confirmar exige al menos un detalle, proveedor activo y productos activos. Dentro
+de una transacción registra Confirmado, FechaConfirmacion UTC y el empleado
+confirmador, y suma todo el stock. Cada actualización exige producto activo y
+Stock <= Int32.MaxValue − cantidad. Si una fila no cambia, todo se revierte.
+Los detalles quedan bloqueados; reconfirmar o modificar detalles confirmados
+devuelve 409. Cambiar precios del catálogo no recalcula los detalles históricos.
+
+Quitar un detalle de borrador lo elimina físicamente, sin afectar stock; los
+detalles confirmados nunca se quitan. Eliminar un encabezado marca Eliminado y
+conserva detalles. Si estaba confirmado, revierte stock con condición Stock >=
+cantidad. La reversión también alcanza productos eliminados lógicamente para no
+perder consistencia histórica. Un stock insuficiente o producto inexistente
+rechaza toda la eliminación, incluida cualquier reversión previa del mismo lote.
+Repetir la eliminación devuelve 404 sin volver a tocar stock. No se borran perfiles,
+proveedores, productos ni datos de confirmación históricos.
+
+IngresoService usa IDbContextTransaction explícitas con aislamiento Serializable
+en todas las escrituras. Antes de operar realiza una actualización sin cambio de
+Observaciones en el encabezado activo para mantener su bloqueo hasta el commit.
+Luego comprueba el estado y hace actualizaciones condicionadas de Confirmado,
+Eliminado y Stock, verificando filas afectadas. Eso serializa edición, confirmación
+y reversión de un mismo ingreso. No se usa RowVersion ni columnas nuevas. Los
+deadlocks SQL Server 1205 y los lock timeouts 1222 devuelven 409 para reintentar;
+las excepciones o cancelaciones anteriores al commit revierten la transacción.
+Si se pierde la respuesta de un commit real, el estado persistido impide una
+segunda aplicación/reversión al reintentar el mismo encabezado.
+
+El listado valida page positivo, pageSize de 1 a 100 (1 y 10 por defecto), filtros
+productoId/proveedorId positivos y rango desde/hasta coherente. Ordena por Fecha
+e Id descendentes; una página fuera del resultado queda vacía. Listado y detalle
+conservan encabezados activos y todos sus detalles aunque sus contrapartes o
+productos históricos estén eliminados. No se agregan endpoints de auditoría de
+ingresos eliminados en este bloque. Un detalle de otro ingreso o encabezado
+eliminado no se puede leer/modificar mediante una ruta ajena.
+
+### 11.6 Salidas pendientes
+
+Las consultas actuales de salidas admiten Administrador y Empleado, con filtros
+productoId, clienteId y desde/hasta, orden Fecha/Id descendente y paginado.
+SalidaResponse expone encabezado, estados, fechas y detalles; SalidaRequest solo
+Observaciones, sin ClienteId ni EmpleadoId para elegir la identidad.
+MovimientoService mantiene únicamente la creación de salidas en 501. Las consultas
+propias del Cliente y el flujo completo de carrito/stock se implementarán en el
+paso 11, sin reactivar el antiguo descuento inmediato de stock al crear.
 
 ## 12 Entorno y configuración
 
@@ -757,7 +838,7 @@ Actualmente hay 13 migraciones: las once iniciales y estas dos del ajuste de CUI
 | `20261026210457_CuilUnicoClientes` | CUITNormalizado calculado en Usuarios e índice único filtrado por rol Cliente |
 | `20261026210619_CuilUnicoProveedores` | CUITNormalizado calculado en Proveedores e índice único sin filtro |
 
-No hubo cambios de esquema en los pasos 7, 8, 9.1, 9.2, 9.3, 9.4 ni 9.5; no se crearon migraciones
+No hubo cambios de esquema en los pasos 7, 8, 9.1, 9.2, 9.3, 9.4, 9.5 ni 10; no se crearon migraciones
 vacías. El snapshot vigente está en `TPN°5-Movil/Migrations`, para que lo descubra
 tanto la API como el proyecto auxiliar.
 
@@ -870,6 +951,7 @@ ni debe interpretarse como una suite vigente.
 | Paso 9.3 | 99 pruebas, 0 fallidas y 0 omitidas; compilación sin advertencias | Funcionales en SQLite; sin pruebas funcionales en SQL Server ni migraciones nuevas |
 | Paso 9.4 | 119 pruebas, 0 fallidas y 0 omitidas; compilación sin advertencias | Funcionales en SQLite; sin pruebas funcionales en SQL Server ni migraciones nuevas |
 | Paso 9.5 | 165 pruebas, 0 fallidas y 0 omitidas; compilación sin advertencias | Funcionales en SQLite y filesystem temporal en Windows; sin pruebas funcionales en SQL Server/Linux; suite retirada después por instrucción del usuario |
+| Paso 10 | 242 comprobaciones temporales aprobadas; compilación sin errores ni advertencias | HTTP, fallos y concurrencia en SQLite aislada; adaptación del descuento para ese proveedor; sin validación funcional en SQL Server ni pruebas añadidas al repositorio |
 
 Los números son totales de la suite en cada entrega, no cantidades acumulables.
 Durante el paso 8 se aplicaron las once migraciones iniciales a bases nuevas de
@@ -921,6 +1003,26 @@ ejecutó tools/Schema: confirmó once entidades, trece migraciones y las restric
 del modelo, sin conectar a una base. El retiro no deja referencias rotas al
 proyecto de pruebas en la solución.
 
+En el paso 10 se ejecutó un verificador temporal fuera del repositorio, con JWT
+reales de cuentas ficticias, SQLite en archivos separados y conexiones distintas.
+Sus 242 comprobaciones aprobaron permisos, DTOs, identidad, encabezado inmutable,
+descuentos/redondeo, precio histórico, totales y límites, detalles ajenos, filtros,
+confirmación única, eliminación de borrador, reversión, overflow, referencias
+eliminadas y rollback por stock insuficiente. Se inyectaron fallos en la segunda
+actualización de stock y después de un commit real para verificar rollback o
+rechazo del reintento sin duplicar stock. Se corrieron solicitudes concurrentes de
+confirmación/confirmación, edición/confirmación, confirmación/eliminación,
+eliminación/eliminación y dos ingresos distintos que comparten productos.
+
+El verificador adapta exclusivamente en su DbContext temporal DescAplicado a REAL:
+SQLite almacena decimal como TEXT y su CHECK BETWEEN no reproduce decimal(5,2)
+de SQL Server para descuentos como 50. La aritmética del servicio siguió usando
+decimal; no se cambió el modelo productivo ni la restricción SQL Server. Estas
+comprobaciones no certifican los bloqueos ni las migraciones en SQL Server real.
+tools/Schema confirmó once entidades y trece migraciones, y dotnet-ef 9.0.11
+confirmó que no hay cambios pendientes de modelo, sin conectar a bases. No se
+aplicaron migraciones ni se modificó una base personal.
+
 ## 15 Plan de trabajo y alcance por autorizar
 
 El plan original se mantiene con los siguientes estados:
@@ -940,9 +1042,9 @@ El plan original se mantiene con los siguientes estados:
 | Ajuste adicional | CUIT/CUIL único en clientes y proveedores | Implementado |
 | 9.3 | CRUD de clientes | Implementado e integrado en PR #8 |
 | 9.4 | CRUD de proveedores | Implementado e integrado en PR #9 |
-| 9.5 | CRUD de productos e imágenes | Implementado y publicado en PR #10; pendiente de integración |
-| 10 | Flujo completo de ingresos y stock | Próximo bloque; alcance por autorizar |
-| 11 | Flujo completo de salidas y stock | Pendiente |
+| 9.5 | CRUD de productos e imágenes | Implementado e integrado en PR #10 |
+| 10 | Flujo completo de ingresos y stock | Implementado y publicado en PR #11; pendiente de integración |
+| 11 | Flujo completo de salidas y stock | Próximo bloque; alcance por autorizar |
 | 12 | Validación integral y entrega | Pendiente |
 
 Los pasos 2 al 6 se revisaron después sin duplicar entidades ni migraciones. Que
@@ -973,15 +1075,24 @@ pasado; se elimina el proyecto tests/Auth.Integration y su referencia en la solu
 No se agregan nuevamente esas pruebas por suposición en los siguientes bloques;
 sus resultados quedan registrados en este documento.
 
-Antes del paso 10 revisar encabezados, detalles, permisos de Empleado,
-proveedores/productos activos, identidad desde JWT, confirmación, precios y
-descuentos históricos, totales y redondeo, reversión y concurrencia de stock.
-Presentar alcance concreto antes de editar; no implementar salidas ni carrito
-dentro del mismo bloque.
+El usuario autorizó el paso 10 con el alcance de la sección 11.5, incluida captura
+del precio desde Producto y redondeo AwayFromZero por detalle. Se modifican
+IngresosController, IngresoDtos y el registro de dependencias; se agrega
+IngresoService y se retira únicamente el guard de ingresos de MovimientoService.
+Se actualiza este mismo documento. La autorización cubre cambios locales y
+verificaciones temporales. Posteriormente autorizó el commit y la subida de esta
+entrega para revisión mediante PR. El merge queda a su cargo y no se autoriza
+aplicar migraciones.
+
+Antes del paso 11 revisar carrito propio del Cliente, identidades JWT, detalles
+únicos por producto, confirmación del Cliente y confirmación operativa, descuento
+atómico de stock y consultas/históricos. Resolver primero cómo podrá confirmar
+Administrador sin perfil Empleado y sin inventar una FK: es la duda señalada en
+la sección 5.3. Presentar alcance y obtener autorización antes de editar.
 
 ## 16 Historial de entregas
 
-Estado verificado al preparar esta versión: PR #1 al #9 integrados; PR #10 abierto.
+Estado verificado al preparar esta versión: PR #1 al #10 integrados; PR #11 abierto.
 Los hashes de la columna Commit identifican el trabajo de cada rama.
 
 | Entrega | Rama | Commit | PR |
@@ -995,13 +1106,14 @@ Los hashes de la columna Commit identifican el trabajo de cada rama.
 | Documentación unificada | `codex/documentacion-unificada` | `0d99f59` y `29fe5f6` | [#7](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/7) |
 | Clientes | `codex/paso-9-3-clientes` | `e1a12b7` y `535e869` | [#8](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/8) |
 | Proveedores | `codex/paso-9-4-proveedores` | `ad4267a` y `2a43284` | [#9](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/9) |
-| Productos e imágenes y retiro de pruebas | `codex/paso-9-5-productos-imagenes` | `9929183` inicial | [#10 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/10) |
+| Productos e imágenes y retiro de pruebas | `codex/paso-9-5-productos-imagenes` | `9929183` y `c5f20cc` | [#10](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/10) |
+| Ingresos y stock | `codex/paso-10-ingresos-stock` | `6f4150e` inicial | [#11 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/11) |
 
-El PR #9 ya está integrado mediante `c81dad3`, comprobado al iniciar el paso 9.5.
-El paso 9.5 se publicó en `codex/paso-9-5-productos-imagenes`, basada en
-`origin/main` con ese merge, mediante el commit inicial `9929183`. El PR #10 queda
-abierto para revisión; el merge sigue a cargo del usuario. Esta actualización del
-historial se publica como seguimiento documental en el mismo PR.
+El PR #10 ya está integrado mediante `ec5f3ef`, comprobado al iniciar el paso 10.
+El paso 10 se publicó en `codex/paso-10-ingresos-stock`, basada en `origin/main`
+con ese merge, mediante el commit inicial `6f4150e`. El PR #11 queda abierto para
+revisión; el merge sigue a cargo del usuario. Esta actualización del historial
+se publica como seguimiento documental en el mismo PR.
 
 ## 17 Fuentes originales y decisiones que las reemplazan
 
