@@ -38,14 +38,13 @@ control de emails duplicados y traducción de restricciones únicas; los permiso
 usan constantes de agrupación de los mismos roles existentes. Se conservaron
 contratos, mensajes y reglas de negocio, sin cambios de esquema. Ver 14.7.
 
-**Nueva planificación de simplificación:** el bloque 1 fijó la referencia
-funcional y el bloque 2 se integró mediante PR #20, commit `9e52d72` y merge
-`9b2ea73`. El usuario autorizó luego implementar localmente el bloque 3 en
-`mejoras/simplificacion-bloque-3`, desde ese main: se comparten cálculos y
-validación de importes de ingresos, salidas y auditoría. Ver 15.1 a 15.3.
-El usuario autorizó posteriormente el commit y la publicación del bloque 3 en
-rama para revisión mediante PR; el merge queda a su cargo. Los bloques posteriores
-requieren autorización propia.
+**Nueva planificación de simplificación:** los bloques 2 y 3 están integrados
+mediante PR #20 y #21; este último tiene commit `048ae1d` y merge `f3a91cc`.
+El usuario autorizó implementar y publicar el bloque 4 en una rama para revisión
+antes del merge: `mejoras/simplificacion-bloque-4`, desde main `f3a91cc`.
+Se comparten asignaciones personales de Usuario manteniendo explícitas las
+validaciones de cada perfil. Ver 15.1 a 15.4. El merge queda a cargo del usuario;
+los bloques opcionales posteriores requieren evaluación y autorización propias.
 
 **Mejoras posteriores — bloque 3:** batería reducida integrada mediante PR #18,
 commit `2ad649f` y merge `83fa301`. El usuario autorizó expresamente guardar doce
@@ -1729,7 +1728,7 @@ El 27 de octubre de 2026 se revisó `Plan_simplificacion_API_TPN5.docx` contra m
 `4177555ac9a61cf00d4ed4d01434226e985333a3`. Su contenido se evalúa como propuesta,
 no como una orden de ejecución. La solicitud inicial autorizó revisar el documento
 y actualizar esta documentación; posteriormente se autorizó implementar localmente
-los bloques 2 y 3. Cada bloque de código requiere explicación y autorización propias;
+los bloques 2, 3 y 4. Cada bloque de código requiere explicación y autorización propias;
 commit, publicación, PR y merge mantienen las reglas vigentes.
 
 La estrategia es extraer duplicación concreta sin repetir el bloque 4 ya integrado.
@@ -1742,8 +1741,8 @@ protección del último Administrador y limitador de login.
 | --- | --- | --- |
 | 1 | Fijar contratos y referencia funcional; corregir documentación | Completado: documentación revisada, build sin advertencias y doce pruebas aprobadas contra main 4177555 |
 | 2 | Quitar `ValidarPagina` que solo delega en `Paginacion.Validar`, reutilizar texto opcional de descripción de Producto, retirar `AsQueryable` redundante y compartir proyección de Empleado | Integrado en PR #20; ver 15.2 |
-| 3 | Compartir subtotal y reglas monetarias de ingresos, salidas y auditoría mediante un helper pequeño | Implementado localmente; ver 15.3 |
-| 4 | Compartir únicamente asignaciones de Nombre, Apellido, CUIT y Email de Usuario | Pendiente y condicionado a reducir repetición neta; mantener validaciones por perfil, contraseña y un único SaveChanges |
+| 3 | Compartir subtotal y reglas monetarias de ingresos, salidas y auditoría mediante un helper pequeño | Integrado en PR #21; ver 15.3 |
+| 4 | Compartir únicamente asignaciones de Nombre, Apellido, CUIT y Email de Usuario | Implementado y publicación autorizada; ver 15.4 |
 | 5 | Extraer configuración de JWT, limitador y Swagger de Program | Opcional; puede aumentar líneas; conservar opciones, orden del middleware, CORS y bootstrap explícito |
 | 6 | Revisar intención de métodos transaccionales e históricos | Opcional y posterior; no retirar revalidaciones, bloqueos, actualizaciones condicionadas ni comprobaciones de filas afectadas; no agregar reintentos automáticos |
 
@@ -1908,9 +1907,77 @@ No se ejecutaron todas las baterías históricas ni pruebas de un despliegue rea
 
 No cambian entidades, DbContext, esquema ni migraciones. No se modifican bases
 personales: las pruebas de integración usan SQL Server descartable y las catorce
-migraciones existentes. El siguiente bloque propuesto, todavía sin autorización,
-es compartir asignaciones de datos de Usuario solo si reduce repetición y mantiene
-explícitas las validaciones y responsabilidades por perfil.
+migraciones existentes. Posteriormente el usuario integró el PR #21 mediante
+`f3a91cc` y autorizó implementar y publicar el bloque 4, descrito a continuación.
+
+
+### 15.4 Nuevo bloque 4: asignaciones comunes de Usuario
+
+El usuario autorizó implementación, commit y publicación en rama para revisión
+previa al merge. Rama `mejoras/simplificacion-bloque-4`, desde main `f3a91cc`
+(PR #21 integrado). El merge a main queda a cargo del usuario. Los bloques
+opcionales 5 y 6 no quedan autorizados por esta entrega.
+
+Se agrega una función estática pequeña, AsignarDatos, dentro de AuthService, que
+ya concentra operaciones de cuentas. Recorta Nombre, Apellido y CUIT y asigna el
+Email previamente normalizado por cada operación. Reemplaza exclusivamente las
+cuatro asignaciones repetidas en la edición de Usuarios, Clientes y Empleados.
+No consulta ni guarda datos, no modifica contraseña, rol ni perfil y no incorpora
+nuevos DTOs o jerarquías. No se altera el registro transaccional de cuentas.
+
+Se comprobó por comparación con main que los tres controladores solo sustituyen
+ese bloque de asignación: conservan orden de validación, unicidad incluyendo
+eliminados, normalización específica de email, CUIT de Cliente, FechaIngreso de
+Empleado, contacto de Cliente, contraseña opcional en Usuarios y un único
+SaveChanges para cuenta y perfil. AuthService solo agrega la función; sus flujos
+de login, registro, revocación y último Administrador se conservan.
+
+**Pruebas nuevas:** ActualizacionUsuariosTests incorpora tres escenarios HTTP/SQL:
+
+- Edición propia por las tres rutas con normalización, rechazo de email reservado
+  por cuenta eliminada, rechazo de campos JSON Rol/Id y CUIT de Cliente reservado
+  por cliente eliminado, tanto desde Clientes como desde Usuarios; conserva perfiles.
+- Contraseña omitida mantiene el hash y el token actual; contraseña nueva cambia
+  hash, revoca el token, rechaza la contraseña anterior y permite login con la nueva.
+- Restricciones SQL temporales fuerzan fallos de actualización de contacto y fecha
+  de ingreso; se comprueba rollback de los datos de Usuario y de cada subperfil,
+  sin persistir parcialmente nombre, email, teléfono o fecha.
+
+Se mantienen las expectativas y pruebas anteriores. Las restricciones y bases
+usadas son descartables y no modifican la configuración ni bases personales.
+
+**Medición neta** con el mismo conjunto de 52 archivos funcionales, excluyendo
+Migrations, bin, obj, tests, tools y documentación:
+
+| Medida de API | Antes | Después | Reducción neta |
+| --- | --- | --- | --- |
+| Líneas físicas | 3.423 | 3.422 | 1 |
+| Líneas no vacías | 3.037 | 3.035 | 2 |
+
+Se reutiliza un servicio existente para evitar una clase y archivo adicionales
+que superarían la repetición retirada. El ahorro es mínimo, sin compactar líneas;
+el beneficio es mantener en un solo lugar las cuatro asignaciones. Pruebas se
+contabilizan aparte: un archivo nuevo de 139 líneas. En los bloques 2 a 4 se pasó
+de 3.432 a 3.422 líneas físicas y de 3.048 a 3.035 no vacías: ahorro acumulado de
+10 y 13, respectivamente, menor que la estimación inicial de 40 a 100 líneas.
+No se eliminan controles para alcanzar esa estimación.
+
+**Verificación efectiva de esta entrega:** referencia inicial de treinta casos
+aprobados. Antes de extraer asignaciones, treinta y tres casos aprobados,
+incluidos los tres escenarios nuevos. Después: build con cero errores y cero
+advertencias y treinta y tres casos aprobados (dieciocho de integración y quince
+unitarios), cero fallidos y cero omitidos. No se alteraron expectativas anteriores.
+Se verificó por comparación que AuthService solo agrega la función y que los
+controladores solo reemplazan las cuatro asignaciones. `git diff --check` sin
+errores. SQL Server y archivos de pruebas fueron temporales; el contenedor SQL
+se retiró al finalizar. TRX, bin y obj no se versionan. No se ejecutaron las
+baterías históricas retiradas ni pruebas sobre un despliegue de producción.
+
+No hay cambios de entidades, DbContext, esquema ni migraciones. No corresponde
+una migración vacía. Al cerrar esta entrega quedan completados los bloques
+prioritarios 1 a 4; la organización de Program y la revisión transaccional de
+los bloques 5 y 6 son opcionales y requieren evaluar su beneficio antes de
+proponer cambios. Las demás recomendaciones postergadas siguen sin autorización.
 
 
 El plan original se mantiene con los siguientes estados:

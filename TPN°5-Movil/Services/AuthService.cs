@@ -159,6 +159,14 @@ public class AuthService(AppDbContext db, JwtSettings jwt)
     private static UsuarioDto ToDto(Usuario usuario) =>
         new(usuario.Id, usuario.Nombre, usuario.Apellido, usuario.CUIT, usuario.Email, usuario.Rol, usuario.Eliminado);
 
+    public static void AsignarDatos(Usuario usuario, string nombre, string apellido, string cuit, string emailNormalizado)
+    {
+        usuario.Nombre = nombre.Trim();
+        usuario.Apellido = apellido.Trim();
+        usuario.CUIT = cuit.Trim();
+        usuario.Email = emailNormalizado;
+    }
+
     public static void ValidarPassword(string password)
     {
         if (string.IsNullOrWhiteSpace(password) || password.Length is < 12 or > 128)
