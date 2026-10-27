@@ -32,13 +32,20 @@ API: `TPN°5-Movil`, ASP.NET Core con .NET 9, EF Core 9 y SQL Server.
 
 ## 1 Estado actual y próximo bloque
 
-**Mejoras posteriores — bloque 4:** implementación local autorizada en
-`mejoras/simplificar-reglas-compartidas`, desde main `83fa301` (PR #18 integrado).
-Se comparten paginado, normalización, control de emails duplicados y traducción de
-restricciones únicas; los permisos usan constantes de agrupación de los mismos
-roles existentes. Se conservan contratos, mensajes y reglas de negocio. No cambia
-el modelo y no corresponde generar migraciones. El usuario autorizó posteriormente el commit y la publicación en rama para
-revisión mediante PR; el merge queda a su cargo. Ver 14.7.
+**Mejoras posteriores — bloque 4:** integrado en main mediante PR #19,
+commit `6e4b819` y merge `4177555`. Se comparten paginado, normalización,
+control de emails duplicados y traducción de restricciones únicas; los permisos
+usan constantes de agrupación de los mismos roles existentes. Se conservaron
+contratos, mensajes y reglas de negocio, sin cambios de esquema. Ver 14.7.
+
+**Nueva planificación de simplificación:** revisada contra main `4177555` a partir
+del archivo `Plan_simplificacion_API_TPN5.docx`. El bloque 1 completó la referencia
+funcional con build y doce pruebas aprobadas. Posteriormente, el usuario autorizó
+el bloque 2: implementado localmente en `mejoras/simplificacion-bloque-2`, con
+compilación sin advertencias y trece pruebas aprobadas antes y después. Ver 15.1
+y 15.2. El usuario autorizó posteriormente el commit y la publicación en rama
+para revisión mediante PR; el merge queda a su cargo. Los bloques posteriores
+requieren autorización propia.
 
 **Mejoras posteriores — bloque 3:** batería reducida integrada mediante PR #18,
 commit `2ad649f` y merge `83fa301`. El usuario autorizó expresamente guardar doce
@@ -549,11 +556,13 @@ implementó después en el paso 9.3.
 ## 11 CRUD implementados y contratos pendientes
 
 Clientes está implementado en el paso 9.3, proveedores en el 9.4 y productos e
-imágenes en el 9.5. Los apartados
-pendientes describen código de transición, no una validación integral de esos CRUD.
-Los límites estrictos de paginado de categorías, empleados, clientes, proveedores y productos no
-deben darse por implementados en todas las rutas: el helper general todavía
-normaliza page a un mínimo de 1 y pageSize al intervalo 1 a 100.
+imágenes en el 9.5. Los listados comunes rechazan con 400 `page < 1`, `pageSize`
+fuera de 1..100 y desplazamientos superiores a Int32; no corrigen silenciosamente
+esos parámetros. `Paginacion.Validar` concentra esta regla y
+`PaginatedResult.From` calcula los metadatos. Auditoría conserva sus validaciones
+y mensajes específicos. Una página válida fuera del resultado devuelve Items
+vacío. Las verificaciones históricas y la batería vigente se distinguen en la
+sección 14.
 
 ### 11.1 Clientes implementados
 
@@ -1710,8 +1719,128 @@ Plan de mejoras acordado después del informe de revisión:
 | 1 | Proteger al último Administrador activo | Integrado en PR #16 |
 | 2 | Limitar intentos de login | Integrado en PR #17 |
 | 3 | Batería pequeña de pruebas reproducibles | Integrada en PR #18 |
-| 4 | Simplificar paginado, normalización y grupos de permisos | Implementado y validado; publicación en rama autorizada para revisión |
+| 4 | Simplificar paginado, normalización y grupos de permisos | Integrado en PR #19 |
 | Resto | Otras recomendaciones del informe | Postergadas hasta finalizar los cuatro bloques |
+
+
+### 15.1 Nueva planificación de simplificación: avance por bloques
+
+El 27 de octubre de 2026 se revisó `Plan_simplificacion_API_TPN5.docx` contra main
+`4177555ac9a61cf00d4ed4d01434226e985333a3`. Su contenido se evalúa como propuesta,
+no como una orden de ejecución. La solicitud inicial autorizó revisar el documento
+y actualizar esta documentación; posteriormente se autorizó implementar localmente
+el bloque 2. Cada bloque de código requiere explicación y autorización propias;
+commit, publicación, PR y merge mantienen las reglas vigentes.
+
+La estrategia es extraer duplicación concreta sin repetir el bloque 4 ya integrado.
+No modifica contratos HTTP, DTOs públicos, matriz de permisos, modelo ni esquema.
+No se crean migraciones vacías. Se conservan identidad con un solo rol, perfiles
+con PK compartida, borrado lógico, precios históricos, revocación de JWT,
+protección del último Administrador y limitador de login.
+
+| Orden nuevo | Alcance propuesto | Estado y precauciones |
+| --- | --- | --- |
+| 1 | Fijar contratos y referencia funcional; corregir documentación | Completado: documentación revisada, build sin advertencias y doce pruebas aprobadas contra main 4177555 |
+| 2 | Quitar `ValidarPagina` que solo delega en `Paginacion.Validar`, reutilizar texto opcional de descripción de Producto, retirar `AsQueryable` redundante y compartir proyección de Empleado | Implementado localmente; ver 15.2 |
+| 3 | Compartir subtotal y reglas monetarias de ingresos, salidas y auditoría mediante un helper pequeño | Pendiente; riesgo de alterar redondeo, precisión, límites o traducción SQL; mantener mensajes propios |
+| 4 | Compartir únicamente asignaciones de Nombre, Apellido, CUIT y Email de Usuario | Pendiente y condicionado a reducir repetición neta; mantener validaciones por perfil, contraseña y un único SaveChanges |
+| 5 | Extraer configuración de JWT, limitador y Swagger de Program | Opcional; puede aumentar líneas; conservar opciones, orden del middleware, CORS y bootstrap explícito |
+| 6 | Revisar intención de métodos transaccionales e históricos | Opcional y posterior; no retirar revalidaciones, bloqueos, actualizaciones condicionadas ni comprobaciones de filas afectadas; no agregar reintentos automáticos |
+
+Antes de implementar, comprobar nuevamente commit de main, instrucciones del
+repositorio y cambios pendientes. Ejecutar build y las doce pruebas existentes
+contra SQL Server descartable como referencia, y repetir las verificaciones
+pertinentes después del bloque. No modificar expectativas para acomodar cambios
+de comportamiento. Agregar únicamente comprobaciones significativas faltantes.
+
+Para el bloque 2, comprobar parámetros inválidos y categoría histórica eliminada.
+Para el 3, cubrir descuentos 0 y 100, precisión, redondeos de mitad con AwayFromZero,
+cantidades extremas, límite decimal(18,2), suma de subtotales redondeados y precio
+histórico inmutable. Conservar filtros y paginado en SQL; el helper no justifica
+cargar históricos completos en memoria. Para el 4, comprobar unicidad incluyendo
+eliminados, edición propia, perfiles y revocación al cambiar contraseña. Si se
+aborda el 6, verificar carreras de confirmación, última unidad, rollback parcial,
+reversión insuficiente y referencias eliminadas en SQL Server temporal.
+
+**Medición documental:** el archivo propone ahorrar entre 40 y 100 líneas físicas
+netas en sus bloques 1 a 4, una estimación, no un resultado garantizado. La revisión
+local de main contó 51 archivos C# funcionales, 3.432 líneas físicas y 3.048 no
+vacías, excluyendo Migrations, bin y obj, además de tests y tools externos a la
+carpeta de la API. El archivo recibido menciona 3.479 líneas físicas; por eso se
+debe fijar el mismo criterio y formato antes de comparar. Incluir todos los helpers
+nuevos en el total; mover código no representa ahorro. Reportar por separado
+pruebas y documentación. La reducción de duplicación prevalece sobre una cuota
+de líneas eliminadas.
+
+**Resultado de la revisión inicial:** actualización documental sin cambios de
+código, esquema ni base personal; no se ejecutaron build ni pruebas en esa revisión.
+
+**Bloque 1 ejecutado al iniciar la planificación:** main remoto continúa en
+`4177555`, comprobado con fetch. Se conservaron los cambios documentales locales
+en `docs/plan-simplificacion-api`. `dotnet build --nologo` terminó con cero errores
+y cero advertencias; `dotnet test --no-build --nologo` aprobó las doce pruebas,
+cero fallidas y cero omitidas, contra SQL Server descartable, aplicando en las
+bases de prueba las migraciones existentes. No se modificaron código funcional,
+pruebas ni bases personales. El resultado TRX queda fuera de Git.
+
+El usuario autorizó luego la limpieza pequeña del bloque 2 y su prueba de
+categoría eliminada. La entrega local se detalla a continuación. Las
+recomendaciones anteriores postergadas no se consideran autorizadas por recibir
+este plan.
+
+
+### 15.2 Nuevo bloque 2: limpieza pequeña de Productos y Empleados
+
+Autorización: implementación local, prueba de categoría eliminada, verificaciones
+y actualización de este archivo. Rama `mejoras/simplificacion-bloque-2`, desde
+main `4177555`, conservando los cambios documentales de la revisión previa.
+Posteriormente el usuario autorizó registrar y publicar esta entrega en una rama
+para revisión mediante PR antes de integrar main. El merge queda a su cargo.
+
+En `ProductosController` se elimina el wrapper ValidarPagina y se llama directamente
+a Paginacion.Validar en listado y movimientos. Se retira el AsQueryable redundante
+y se reutiliza Normalizacion.Opcional al crear y editar la descripción. Permanecen
+los filtros de producto activo, categoría/proveedor, búsqueda, permisos y orden.
+En `EmpleadosController`, una proyección IQueryable compartida construye la misma
+respuesta para listado y detalle, manteniendo filtros de perfil, AsNoTracking,
+búsqueda y orden por Apellido, Nombre e Id. No se materializan listas adicionales.
+
+Se agrega un escenario de integración que verifica descripción vacía/nula y texto
+recortado, y producto activo visible en listado filtrado y detalle tras eliminar
+su categoría, conservando todos sus campos y el nombre histórico de categoría.
+Se amplía el escenario de cuenta/perfil para comparar todos los campos entre
+listado filtrado y detalle de Empleado, y el escenario de paginado para cubrir
+parámetros inválidos en movimientos de producto. La suite pasa de doce a trece
+escenarios; no se quitan ni cambian las expectativas anteriores.
+
+**Medición reproducible:** mismo conjunto de 51 archivos C# funcionales, excluyendo
+Migrations, bin y obj, sin reformateo general ni archivos nuevos de producción.
+
+| Medida de API | Antes | Después | Reducción neta |
+| --- | --- | --- | --- |
+| Líneas físicas | 3.432 | 3.427 | 5 |
+| Líneas no vacías | 3.048 | 3.043 | 5 |
+
+El ahorro es menor que el estimado del documento recibido; se conserva la
+extracción porque evita mantener dos proyecciones de Empleado y reutiliza reglas
+existentes sin agregar infraestructura. No se eliminan controles para alcanzar
+una cuota. Pruebas se miden aparte: 34 líneas agregadas y una eliminada en
+CriticalScenarios.cs; la documentación no forma parte de la medición de API.
+
+**Verificación efectiva de esta entrega:** antes de refactorizar se ejecutó
+`dotnet test --nologo` con la prueba nueva y las ampliaciones: trece aprobadas,
+cero fallidas y cero omitidas. Después se ejecutó `dotnet build --nologo`, con
+cero errores y cero advertencias, y `dotnet test --no-build --nologo`: nuevamente
+trece aprobadas, cero fallidas y cero omitidas. Se usó SQL Server descartable;
+no se tocaron bases personales y el contenedor SQL se retiró al finalizar.
+`git diff --check` no reportó errores. Los resultados TRX no se versionan.
+Esta evidencia corresponde a este bloque y se distingue de la referencia inicial
+de doce escenarios y de las verificaciones históricas. No cubre todas las
+variantes de búsqueda u orden posibles ni un servidor de producción.
+
+No cambian DTOs, rutas, permisos, entidades, modelo, esquema ni reglas de stock.
+No corresponde generar migraciones. El siguiente bloque propuesto, todavía sin
+autorización, es compartir cálculos monetarios preservando redondeos y límites.
 
 
 El plan original se mantiene con los siguientes estados:
