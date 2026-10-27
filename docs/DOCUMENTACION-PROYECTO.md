@@ -44,18 +44,23 @@ El PR #11 está integrado en main mediante `6e35de1`, verificado al iniciar el p
 Los resultados figuran en la sección 14.
 La unicidad de CUIT/CUIL entre clientes y entre proveedores tiene migraciones propias.
 
-Los PR del 1 al 11 están integrados en `main`, según las comprobaciones realizadas
-al iniciar el paso 11. El último es el PR #11, integrado mediante
-`6e35de1`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
+Los PR del 1 al 12 están integrados en `main`, según las comprobaciones realizadas
+al iniciar el bloque 12.1. El último es el PR #12, integrado mediante
+`2775d66`. Verificar Git y GitHub de nuevo en cada sesión: este dato no se actualiza
 automáticamente por estar escrito aquí.
 
 El usuario autorizó el **paso 11, flujo completo de salidas y carrito**, incluida
 la confirmación por Administrador y Empleado y la referencia del confirmador a Usuario.
 Está publicado en `codex/paso-11-salidas-stock` mediante el PR #12 y validado mediante
 361 comprobaciones temporales aprobadas, sin incorporar pruebas al repositorio.
-El PR #12 está abierto para revisión e integración por el usuario. No se aplicó
+El PR #12 fue integrado por el usuario mediante `2775d66`. No se aplicó
 la nueva migración a ninguna base.
-El paso 12 de validación integral y entrega continúa pendiente de su alcance propio.
+El bloque **12.1, completar y corregir Usuarios**, está autorizado, implementado
+y publicado en `codex/paso-12-1-usuarios` mediante el PR #13: 293 comprobaciones
+temporales aprobadas y compilación sin errores ni advertencias. El PR está abierto
+para revisión e integración por el usuario.
+Las consultas de auditoría e históricos y la validación integral en SQL Server
+continúan pendientes de sus propios alcances y autorizaciones.
 
 | Área | Estado vigente |
 | --- | --- |
@@ -69,17 +74,14 @@ El paso 12 de validación integral y entrega continúa pendiente de su alcance p
 | CRUD completo de proveedores | Paso 9.4 integrado en PR #9 |
 | Productos e imágenes | Paso 9.5 integrado en PR #10 |
 | Ingresos y stock | Paso 10 integrado en PR #11 |
-| Salidas, carrito y stock | Paso 11 publicado en PR #12; pendiente de integración |
+| Salidas, carrito y stock | Paso 11 integrado en PR #12 |
+| CRUD general de usuarios | Bloque 12.1 publicado en PR #13; pendiente de integración |
 | Auditoría completa e históricos autorizados | Pendientes |
 | Base personal del usuario | No se verificó ni migró; no asumir que está preparada |
 
-Los endpoints temporalmente no disponibles devuelven `501` después de los
-controles de autorización y validación de entrada que correspondan:
-
-- `POST /api/usuarios`.
-
-Los tres tipos de cuenta pueden crearse mediante `POST /api/auth/register`,
-exclusivo de Administrador. Los empleados y clientes también pueden crearse
+POST /api/usuarios deja de devolver 501 en el bloque 12.1. Los tres tipos de cuenta
+pueden crearse mediante `POST /api/usuarios` o `POST /api/auth/register`, exclusivos
+de Administrador y con la misma creación transaccional de cuenta y perfil. Los empleados y clientes también pueden crearse
 mediante `POST /api/empleados` y `POST /api/clientes`, respectivamente.
 
 ## 2 Reglas de trabajo y autorizaciones
@@ -189,6 +191,7 @@ controladores todavía pendientes se documentan aparte y no amplían estas regla
 | --- | --- | --- | --- |
 | CRUD y consultas administrativas de categorías | Sí | No | No |
 | Catálogo de categorías activas con Id y Nombre | Sí | Sí | Sí |
+| CRUD general de usuarios | Sí | No | No |
 | CRUD de empleados | Sí | No | No |
 | CRUD de clientes | Sí | No | No |
 | CRUD de proveedores | Sí | Sí | No |
@@ -513,13 +516,53 @@ El cliente desaparece de listado, catálogo y detalle y pierde acceso con tokens
 anteriores en la siguiente petición. Tampoco puede iniciar sesión nuevamente.
 Se mantienen reservados email y CUIL; repetir edición o borrado devuelve 404.
 
-### 11.2 Usuarios pendientes de revisión integral
+### 11.2 Usuarios completados en el bloque 12.1
 
-UsuariosController es exclusivo de Administrador: GET paginado, GET por ID,
-PUT y DELETE operan; POST sigue en 501. UsuarioDto usa Nombre y Apellido separados,
-CUIT y Eliminado. La edición no cambia Rol, no restaura cuentas ni borra perfiles;
-puede cambiar Password, sujeta a la política del paso 8. Email y otras validaciones
-de esa ruta requieren revisión; no asumir toda la normalización del registro.
+Todas las rutas de UsuariosController requieren Administrador. GET devuelve solo
+cuentas activas. El listado valida page positivo, pageSize 1..100 y desplazamiento
+dentro de int; ordena por Email e Id, recorta busqueda y filtra por nombre completo
+o email. Una página fuera de rango queda vacía; una búsqueda vacía no filtra.
+GET por ID devuelve UsuarioDto o 404; no expone Password ni PasswordHash.
+
+POST /api/usuarios devuelve 201 y Location al detalle. Usa AuthService.RegisterAsync,
+con la misma transacción que crea Usuario y el perfil de PK compartida. No se
+implementa otra creación paralela ni se expone autorregistro público. El DTO exige
+Nombre/Apellido hasta 150, CUIT hasta 20, Email válido hasta 150 y contraseña entre
+12 y 128 caracteres, no vacía ni solo espacios. El email se recorta y pasa a
+minúsculas antes de validarlo; nombres/apellido/CUIT se recortan antes de guardar.
+La longitud de email se evalúa normalizada; las otras longitudes se validan sobre
+el valor recibido. Se rechazan campos desconocidos, incluidos Id, Eliminado,
+PasswordHash, objetos de perfil, stock o múltiples roles.
+
+La creación requiere exactamente Rol Administrador, Empleado o Cliente:
+Administrador no admite datos de perfil; Empleado requiere FechaIngreso distinta
+de MinValue y no admite Telefono/Direccion; Cliente admite Telefono hasta 50 y
+Direccion hasta 300, recortados o null si están vacíos, sin FechaIngreso. Los datos
+de un perfil incompatible se rechazan aunque sean cadenas vacías o espacios.
+Las reglas de perfil y contraseña se vuelven a validar en AuthService.
+
+PUT actualiza exclusivamente Nombre, Apellido, CUIT, Email y Password opcional,
+con las mismas validaciones de campos comunes. Omisión o null de Password conserva
+el hash; si se suministra un valor, se exige la política de 12..128 caracteres y
+no solo espacios. Un valor vacío ya no se ignora: devuelve 400. Una contraseña
+nueva se hashea con PasswordHasher y revoca los JWT anteriores mediante la
+validación existente. El rol, los perfiles y sus datos específicos no se modifican
+ni se aceptan en ese JSON. Los datos desconocidos se rechazan, también Eliminado.
+
+La comparación de email al editar ignora mayúsculas y contempla cuentas eliminadas,
+excluyendo el ID editado. AuthService conserva esa regla al crear. CUIT/CUIL mantiene
+unicidad solo entre Clientes, incluyendo eliminados y normalizando los separadores
+definidos en la sección 10; no se amplía la unicidad a Empleados/Administradores ni
+se agrega formato de once dígitos o validación de dígito verificador. Los conflictos
+SQL Server de claves únicas 2601/2627 siguen traduciéndose a 409.
+
+DELETE devuelve 204 y marca Usuario.Eliminado: conserva perfiles y referencias
+históricas, revoca el JWT de la cuenta y no restaura ni borra físicamente datos.
+Una cuenta ausente o eliminada devuelve 404 al consultar, editar o eliminar de nuevo.
+No se incorpora una regla nueva sobre eliminación propia o del último administrador.
+No se agrega auditoría, cambios de rol, restauración, tablas, índices ni migraciones.
+Solo cambian UsuariosController, UsuarioDtos y esta documentación; AuthService,
+las entidades y el helper compartido de paginación mantienen su implementación.
 
 ### 11.3 Proveedores implementados
 
@@ -1021,6 +1064,7 @@ ni debe interpretarse como una suite vigente.
 | Paso 9.5 | 165 pruebas, 0 fallidas y 0 omitidas; compilación sin advertencias | Funcionales en SQLite y filesystem temporal en Windows; sin pruebas funcionales en SQL Server/Linux; suite retirada después por instrucción del usuario |
 | Paso 10 | 242 comprobaciones temporales aprobadas; compilación sin errores ni advertencias | HTTP, fallos y concurrencia en SQLite aislada; adaptación del descuento para ese proveedor; sin validación funcional en SQL Server ni pruebas añadidas al repositorio |
 | Paso 11 | 361 comprobaciones temporales aprobadas; compilación sin errores ni advertencias; 14 migraciones y sin cambios pendientes de modelo | HTTP, fallos y concurrencia en SQLite aislada; SQL de migración generado/revisado sin ejecutarlo; sin validación funcional en SQL Server ni pruebas añadidas al repositorio |
+| Bloque 12.1 | 293 comprobaciones temporales aprobadas; compilación sin errores ni advertencias; sin cambios pendientes de modelo | HTTP y JWT reales, rollback y concurrencia en SQLite aislada; sin pruebas funcionales en SQL Server ni pruebas añadidas al repositorio |
 
 Los números son totales de la suite en cada entrega, no cantidades acumulables.
 Durante el paso 8 se aplicaron las once migraciones iniciales a bases nuevas de
@@ -1123,6 +1167,38 @@ borra registros. No se ejecutó la migración ni se conectó a bases personales 
 SQL Server para validación funcional. El rollback a FK Empleados requiere revisar
 previamente las confirmaciones de administradores, como explica la sección 13.1.
 
+En el bloque 12.1 se ejecutaron 293 comprobaciones temporales fuera del repositorio,
+mediante HTTP con JWT emitidos por login real y archivos SQLite/webroot aislados.
+Se verificaron permisos de las cinco rutas de Usuarios, lecturas sin contraseña,
+Location, creación de Administrador/Empleado/Cliente con perfil exacto y PK
+compartida, ausencia de perfiles incompatibles, normalización y límites de datos,
+campos desconocidos, paginado, búsqueda y rechazo de entradas inválidas sin cambios
+persistidos. La creación general conserva la unicidad con /api/auth/register.
+
+La edición conserva el rol y los datos propios del perfil. Se verificaron email
+sin distinción de mayúsculas e incluyendo eliminados, CUIL de cliente normalizado
+e incluyendo eliminados y su independencia respecto de proveedores y otros roles.
+Omitir o enviar null en Password conserva el hash; cambiarla invalida los JWT
+anteriores y las credenciales previas. Los valores vacíos o solo espacios se
+rechazan. Soft delete oculta la cuenta, revoca su JWT y conserva perfiles y salidas
+históricas; no permite reutilizar email ni CUIL de cliente.
+
+Un fallo inyectado al insertar Cliente revirtió también la inserción de Usuario:
+no quedó una cuenta huérfana y el reintento posterior creó la cuenta normalmente.
+Una respuesta perdida después del commit conservó cuenta/perfil y el reintento
+recibió 409. Dos altas concurrentes con los mismos datos produjeron una sola cuenta
+y un conflicto, sin duplicados. Son escenarios de SQLite, sin afirmar equivalencia
+de bloqueo ni verificar funcionalmente SQL Server. Se reutilizó únicamente la
+infraestructura temporal de las verificaciones anteriores; no se ejecutaron de
+nuevo sus suites completas ni se añadieron pruebas al repositorio.
+
+La compilación de la solución terminó con 0 errores y 0 advertencias. tools/Schema
+confirmó once entidades y catorce migraciones y dotnet-ef 9.0.11 confirmó que no hay
+cambios de modelo pendientes. En este bloque no se modificaron entidades, snapshot,
+migraciones ni dependencias. No se conectó a bases personales ni se aplicaron
+migraciones. Las verificaciones temporales conservan la adaptación de descuentos
+SQLite descrita en el paso 11; no cambia el modelo de producción.
+
 ## 15 Plan de trabajo y alcance por autorizar
 
 El plan original se mantiene con los siguientes estados:
@@ -1144,8 +1220,11 @@ El plan original se mantiene con los siguientes estados:
 | 9.4 | CRUD de proveedores | Implementado e integrado en PR #9 |
 | 9.5 | CRUD de productos e imágenes | Implementado e integrado en PR #10 |
 | 10 | Flujo completo de ingresos y stock | Integrado en PR #11 |
-| 11 | Flujo completo de salidas y stock | Implementado y publicado en PR #12; pendiente de integración |
-| 12 | Validación integral y entrega | Pendiente |
+| 11 | Flujo completo de salidas y stock | Integrado en PR #12 |
+| 12 | Validación integral y entrega | En curso por bloques; no completado |
+| 12.1 | Completar y corregir Usuarios | Publicado en PR #13; pendiente de integración |
+| 12.2 propuesto | Consultas administrativas de históricos y eliminados | Pendiente de alcance y autorización |
+| 12.3 propuesto | Validación integral en SQL Server y preparación de entrega | Pendiente de alcance y autorización |
 
 Los pasos 2 al 6 se revisaron después sin duplicar entidades ni migraciones. Que
 el modelo exista no significa que sus flujos funcionales estén terminados.
@@ -1197,9 +1276,20 @@ Posteriormente el usuario autorizó el commit y la subida de esta entrega a una
 rama del proyecto para revisión mediante PR. El merge queda a su cargo y no se
 autoriza aplicar la migración.
 
+El usuario autorizó el bloque 12.1 después de la revisión estática del proyecto:
+completar POST de Usuarios reutilizando AuthService, validar y normalizar los DTO,
+rechazar campos desconocidos, controlar emails duplicados incluyendo eliminados,
+validar paginación y preservar rol, perfiles, CUIL de clientes, cambio opcional de
+contraseña y soft delete. Se modifican UsuariosController, UsuarioDtos y esta
+misma documentación. La autorización inicial cubrió cambios locales y verificaciones
+temporales externas al repositorio. Posteriormente el usuario autorizó el commit,
+la subida de la rama y la entrega para revisión mediante PR. El merge queda a su
+cargo; no se autorizan migraciones ni cambios en bases personales. Auditoría e históricos y validación integral son bloques
+posteriores que requieren su propio alcance aprobado.
+
 ## 16 Historial de entregas
 
-Estado verificado al publicar esta entrega: PR #1 al #11 integrados; PR #12 abierto.
+Estado verificado al publicar el bloque 12.1: PR #1 al #12 integrados; PR #13 abierto.
 Los hashes de la columna Commit identifican el trabajo de cada rama.
 
 | Entrega | Rama | Commit | PR |
@@ -1215,14 +1305,19 @@ Los hashes de la columna Commit identifican el trabajo de cada rama.
 | Proveedores | `codex/paso-9-4-proveedores` | `ad4267a` y `2a43284` | [#9](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/9) |
 | Productos e imágenes y retiro de pruebas | `codex/paso-9-5-productos-imagenes` | `9929183` y `c5f20cc` | [#10](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/10) |
 | Ingresos y stock | `codex/paso-10-ingresos-stock` | `6f4150e` y `016d5db` | [#11 integrado](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/11) |
-| Salidas, carrito y stock | `codex/paso-11-salidas-stock` | `e078981` inicial | [#12 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/12) |
+| Salidas, carrito y stock | `codex/paso-11-salidas-stock` | `e078981` inicial | [#12 integrado](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/12) |
+| Usuarios | `codex/paso-12-1-usuarios` | `2783113` inicial | [#13 abierto](https://github.com/LuAlzuri/TPN-5-Movil-Correcion/pull/13) |
 
 El PR #10 ya está integrado mediante `ec5f3ef`, comprobado al iniciar el paso 10.
 El paso 10 se publicó en `codex/paso-10-ingresos-stock`, basada en `origin/main`
 con ese merge, mediante el commit inicial `6f4150e`. El usuario integró el PR #11 mediante `6e35de1`, verificado antes de crear la rama
 local `codex/paso-11-salidas-stock`. El paso 11 se publicó con el commit inicial
 `e078981` mediante el PR #12. Esta actualización documental se publica en la misma
-rama como seguimiento de la entrega. El merge sigue a cargo del usuario.
+rama como seguimiento de la entrega. El usuario integró el PR #12 mediante
+`2775d66`, verificado al iniciar el bloque 12.1. La rama local de ese bloque parte
+de ese main actualizado. El bloque 12.1 se publicó con el commit inicial `2783113`
+mediante el PR #13. Esta actualización documental se publica como seguimiento en
+la misma rama. El merge queda a cargo del usuario.
 
 ## 17 Fuentes originales y decisiones que las reemplazan
 
