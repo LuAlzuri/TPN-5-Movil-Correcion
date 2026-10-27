@@ -179,8 +179,9 @@ public sealed class SalidaService(AppDbContext db)
             return true;
         }, ct);
 
-    private IQueryable<Salida> Visibles(int? propietarioId) => db.Salidas.AsNoTracking()
-        .Where(s => !propietarioId.HasValue || s.ClienteId == propietarioId.Value);
+    private IQueryable<Salida> Visibles(int? propietarioId) => propietarioId.HasValue
+        ? db.Salidas.IgnoreQueryFilters().AsNoTracking().Where(s => s.ClienteId == propietarioId.Value)
+        : db.Salidas.AsNoTracking();
 
     private async Task<Salida> BuscarAsync(int id, int? propietarioId, CancellationToken ct) =>
         await Visibles(propietarioId).SingleOrDefaultAsync(s => s.Id == id, ct) ?? throw NoEncontrado("La salida no existe.");
@@ -264,6 +265,7 @@ public sealed class SalidaService(AppDbContext db)
     {
         var rows = details.Select(Respuesta).ToList();
         return new(s.Id, s.ClienteId, s.UsuarioConfirmacionId, s.Fecha, s.Observaciones, s.ConfirmarXCliente,
-            s.ConfirmarXEmpleado, s.FechaConfirmacionCliente, s.FechaConfirmacionEmpleado, rows, rows.Sum(d => d.Subtotal));
+            s.ConfirmarXEmpleado, s.FechaConfirmacionCliente, s.FechaConfirmacionEmpleado, rows, rows.Sum(d => d.Subtotal))
+            { Eliminado = s.Eliminado };
     }
 }

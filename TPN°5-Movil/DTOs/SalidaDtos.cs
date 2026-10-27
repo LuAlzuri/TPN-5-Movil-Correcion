@@ -6,7 +6,10 @@ namespace TPN_5_MOVIL.DTOs;
 public record DetalleSalidaResponse(int Id, int ProductoId, int Cantidad, decimal PrecioUnitario, decimal DescAplicado, decimal Subtotal);
 public record SalidaResponse(int Id, int ClienteId, int? UsuarioConfirmacionId, DateTime Fecha, string? Observaciones,
     bool ConfirmarXCliente, bool ConfirmarXEmpleado, DateTime? FechaConfirmacionCliente,
-    DateTime? FechaConfirmacionEmpleado, List<DetalleSalidaResponse> Detalles, decimal Total);
+    DateTime? FechaConfirmacionEmpleado, List<DetalleSalidaResponse> Detalles, decimal Total)
+{
+    public bool Eliminado { get; init; }
+}
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class SalidaRequest
