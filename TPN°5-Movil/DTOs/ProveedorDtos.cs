@@ -24,7 +24,7 @@ public sealed class ProveedorRequest
     public string? Email
     {
         get => email;
-        init => email = string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
+        init => email = Normalizacion.EmailOpcional(value);
     }
 
     [MaxLength(50)]

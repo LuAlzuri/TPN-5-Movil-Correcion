@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using TPN_5_MOVIL.Data;
 using TPN_5_MOVIL.DTOs;
@@ -23,8 +22,7 @@ public class EmpleadosController(AppDbContext db, AuthService auth) : Controller
         [FromQuery] int page = 1, [FromQuery] int pageSize = 10,
         [FromQuery] string? busqueda = null)
     {
-        if (page < 1 || pageSize < 1 || pageSize > 100 || (long)(page - 1) * pageSize > int.MaxValue)
-            throw new ApiException("Página inválida: page debe ser positivo y pageSize debe estar entre 1 y 100.");
+        Paginacion.Validar(page, pageSize);
 
         var query = EmpleadosValidos.AsNoTracking();
         busqueda = busqueda?.Trim();
@@ -69,25 +67,15 @@ public class EmpleadosController(AppDbContext db, AuthService auth) : Controller
         var empleado = await EmpleadosValidos.Include(e => e.Usuario).FirstOrDefaultAsync(e => e.Id == id);
         if (empleado is null) return NotFound();
 
-        var email = request.Email.Trim().ToLowerInvariant();
-        var comparison = email.ToUpperInvariant();
-        if (await db.Usuarios.IgnoreQueryFilters().AnyAsync(u => u.Id != id && u.Email.ToUpper() == comparison))
-            throw new ApiException("Ya existe una cuenta con ese email.", StatusCodes.Status409Conflict);
+        var email = Normalizacion.Email(request.Email);
+        await db.ExigirEmailLibreAsync(email, "Ya existe una cuenta con ese email.", id);
 
         empleado.Usuario.Nombre = request.Nombre.Trim();
         empleado.Usuario.Apellido = request.Apellido.Trim();
         empleado.Usuario.CUIT = request.CUIT.Trim();
         empleado.Usuario.Email = email;
         empleado.FechaIngreso = request.FechaIngreso!.Value;
-        try
-        {
-            // SaveChanges wraps the account and profile updates in a single transaction.
-            await db.SaveChangesAsync();
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
-        {
-            throw new ApiException("Ya existe una cuenta con esos datos únicos.", StatusCodes.Status409Conflict);
-        }
+        await db.GuardarOConflictoAsync("Ya existe una cuenta con esos datos únicos.");
         return NoContent();
     }
 

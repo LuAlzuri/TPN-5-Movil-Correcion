@@ -32,16 +32,20 @@ API: `TPN°5-Movil`, ASP.NET Core con .NET 9, EF Core 9 y SQL Server.
 
 ## 1 Estado actual y próximo bloque
 
-**Mejoras posteriores — bloque 3:** batería reducida implementada localmente en
-`mejoras/pruebas-reproducibles`, desde main `28a12dc` (PR #17 integrado). El usuario
-autorizó expresamente guardar doce escenarios reproducibles, reemplazando la
-instrucción de retiro solo para esta nueva batería. Proyecto:
-`tests/TPN5.Integration`, xUnit y SQL Server real administrado por Testcontainers.
-La ejecución final aprobó doce pruebas, cero fallidas y cero omitidas. No se
-modificaron código funcional, esquema ni contratos. Después de la validación, el
-usuario autorizó registrar esta entrega en una rama para revisión previa al merge,
-que queda a su cargo. El siguiente es simplificar paginado, normalización y
-grupos de permisos, con alcance propio y esta batería como regresión. Ver 14.6.
+**Mejoras posteriores — bloque 4:** implementación local autorizada en
+`mejoras/simplificar-reglas-compartidas`, desde main `83fa301` (PR #18 integrado).
+Se comparten paginado, normalización, control de emails duplicados y traducción de
+restricciones únicas; los permisos usan constantes de agrupación de los mismos
+roles existentes. Se conservan contratos, mensajes y reglas de negocio. No cambia
+el modelo y no corresponde generar migraciones. El usuario autorizó posteriormente el commit y la publicación en rama para
+revisión mediante PR; el merge queda a su cargo. Ver 14.7.
+
+**Mejoras posteriores — bloque 3:** batería reducida integrada mediante PR #18,
+commit `2ad649f` y merge `83fa301`. El usuario autorizó expresamente guardar doce
+escenarios reproducibles, reemplazando la instrucción de retiro solo para esta
+nueva batería. Proyecto `tests/TPN5.Integration`, xUnit y SQL Server real
+administrado por Testcontainers. Doce pruebas aprobadas, cero fallidas y cero
+omitidas. No modificó código funcional, esquema ni contratos. Ver 14.6.
 
 **Mejoras posteriores — bloque 2:** límite del login integrado en main mediante
 PR #17, commit `28c0ef3` y merge `28a12dc`. Conserva cinco solicitudes por minuto
@@ -1658,6 +1662,46 @@ Para el bloque 4, ejecutar esta batería antes y después de cada simplificació
 Un fallo requiere investigar su causa: no actualizar expectativas ni quitar
 aserciones para acomodar un cambio de comportamiento no autorizado.
 
+### 14.7 Bloque 4: simplificación de reglas compartidas
+
+Autorización inicial: implementación local y pruebas, con explicación previa. Rama
+`mejoras/simplificar-reglas-compartidas`, basada en main `83fa301`. Posteriormente
+el usuario autorizó registrar y publicar los cambios en una rama para revisión
+mediante PR antes de integrar main. El merge queda a su cargo. No se modifican
+bases personales.
+
+- `Paginacion.Validar` concentra el límite de 100 elementos y el control de
+  desbordamiento. `PaginatedResult.From` calcula los metadatos de los listados
+  comunes, ingresos, salidas y auditoría. Se conservan las validaciones y mensajes
+  propios de los filtros de auditoría, el orden SQL y las respuestas JSON.
+- `Normalizacion` reúne email obligatorio, email opcional y texto opcional.
+  Conserva la diferencia entre email vacío y nulo, y el rechazo de campos de
+  perfil incompatibles. No altera la validación de CUIT ni la normalización del
+  login. Los datos de contacto de registro conservan su semántica anterior.
+- Las extensiones de `Guardado` comprueban duplicados de email incluyendo
+  eliminados y excluyendo el ID editado, y traducen exclusivamente errores SQL
+  2601/2627 a conflicto 409. Cada operación conserva su mensaje anterior y una
+  sola llamada a SaveChanges para mantener cuenta y perfil atómicos. Se conserva
+  la comparación SQL de email existente; optimizar índices/collation se posterga.
+- `GruposRoles` agrupa Administrador/Empleado y los tres roles con constantes.
+  No agrega roles, políticas ni permisos. Permanecen las restricciones
+  particulares de cada acción y los controles de propiedad e identidad.
+
+No se modifican entidades, DbContext, migraciones, transacciones de stock,
+precios ni protección del último Administrador. Siguen vigentes catorce
+migraciones; no corresponde una migración vacía para esta refactorización.
+**Validación:** cuatro ejecuciones completas de `dotnet test`: referencia inicial,
+paginado, normalización y permisos/final. Cada una aprobó doce pruebas, cero
+fallidas y cero omitidas, sin advertencias. Las expectativas de las pruebas no se
+modificaron. Se comprobó además que todos los atributos de autorización resuelven
+los mismos roles que main y que los métodos de ingresos/salidas posteriores al
+listado permanecen idénticos. `git diff --check` no reportó errores. SQL Server y
+archivos de prueba fueron temporales; el contenedor SQL se retiró al finalizar.
+
+El siguiente hito es la revisión del PR de esta entrega y su eventual merge por
+parte del usuario. Las recomendaciones restantes del informe
+siguen postergadas hasta evaluar el cierre de los cuatro bloques.
+
 ## 15 Plan de trabajo y alcance por autorizar
 Plan de mejoras acordado después del informe de revisión:
 
@@ -1665,8 +1709,8 @@ Plan de mejoras acordado después del informe de revisión:
 | --- | --- | --- |
 | 1 | Proteger al último Administrador activo | Integrado en PR #16 |
 | 2 | Limitar intentos de login | Integrado en PR #17 |
-| 3 | Batería pequeña de pruebas reproducibles | Implementada y validada; entrega por rama autorizada para revisión |
-| 4 | Simplificar paginado, normalización y grupos de permisos | Pendiente, conservando contratos y matriz de autorización |
+| 3 | Batería pequeña de pruebas reproducibles | Integrada en PR #18 |
+| 4 | Simplificar paginado, normalización y grupos de permisos | Implementado y validado; publicación en rama autorizada para revisión |
 | Resto | Otras recomendaciones del informe | Postergadas hasta finalizar los cuatro bloques |
 
 

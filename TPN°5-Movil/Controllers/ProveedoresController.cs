@@ -1,6 +1,6 @@
+using TPN_5_MOVIL.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using TPN_5_MOVIL.Data;
 using TPN_5_MOVIL.DTOs;
@@ -12,7 +12,7 @@ namespace TPN_5_MOVIL.Controllers;
 
 [ApiController]
 [Route("api/proveedores")]
-[Authorize(Roles = Usuario.RolAdministrador + "," + Usuario.RolEmpleado)]
+[Authorize(Roles = GruposRoles.Personal)]
 public class ProveedoresController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -28,8 +28,7 @@ public class ProveedoresController : ControllerBase
         [FromQuery] int pageSize = 10,
         [FromQuery] string? busqueda = null)
     {
-        if (page < 1 || pageSize < 1 || pageSize > 100 || (long)(page - 1) * pageSize > int.MaxValue)
-            throw new ApiException("Página inválida: page debe ser positivo y pageSize debe estar entre 1 y 100.");
+        Paginacion.Validar(page, pageSize);
 
         busqueda = busqueda?.Trim();
         var query = _db.Proveedores
@@ -83,8 +82,8 @@ public class ProveedoresController : ControllerBase
             Nombre = request.Nombre.Trim(),
             CUIT = request.CUIT.Trim(),
             Email = request.Email,
-            Telefono = NormalizarOpcional(request.Telefono),
-            Direccion = NormalizarOpcional(request.Direccion)
+            Telefono = Normalizacion.Opcional(request.Telefono),
+            Direccion = Normalizacion.Opcional(request.Direccion)
         };
 
         _db.Proveedores.Add(proveedor);
@@ -106,8 +105,8 @@ public class ProveedoresController : ControllerBase
         proveedor.Nombre = request.Nombre.Trim();
         proveedor.CUIT = request.CUIT.Trim();
         proveedor.Email = request.Email;
-        proveedor.Telefono = NormalizarOpcional(request.Telefono);
-        proveedor.Direccion = NormalizarOpcional(request.Direccion);
+        proveedor.Telefono = Normalizacion.Opcional(request.Telefono);
+        proveedor.Direccion = Normalizacion.Opcional(request.Direccion);
 
         await GuardarAsync();
         return NoContent();
@@ -125,18 +124,8 @@ public class ProveedoresController : ControllerBase
         return NoContent();
     }
 
-    private static string? NormalizarOpcional(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
     private async Task GuardarAsync()
     {
-        try
-        {
-            await _db.SaveChangesAsync();
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
-        {
-            throw new ApiException("Ya existe un proveedor con ese CUIT/CUIL.", StatusCodes.Status409Conflict);
-        }
+        await _db.GuardarOConflictoAsync("Ya existe un proveedor con ese CUIT/CUIL.");
     }
 }

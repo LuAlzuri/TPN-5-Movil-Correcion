@@ -15,8 +15,7 @@ public sealed class SalidaService(AppDbContext db)
     public async Task<PaginatedResult<SalidaResponse>> ListarAsync(int? propietarioId, int page, int pageSize,
         int? productoId, int? clienteId, DateTime? desde, DateTime? hasta, CancellationToken ct)
     {
-        if (page < 1 || pageSize < 1 || pageSize > 100 || (long)(page - 1) * pageSize > int.MaxValue)
-            throw new ApiException("Página inválida: page debe ser positivo y pageSize debe estar entre 1 y 100.");
+        Paginacion.Validar(page, pageSize);
         if (productoId <= 0 || clienteId <= 0 || desde > hasta)
             throw new ApiException("Revise los identificadores y el rango de fechas.");
         var query = Visibles(propietarioId);
@@ -32,13 +31,8 @@ public sealed class SalidaService(AppDbContext db)
         var details = await db.DetallesSalida.IgnoreQueryFilters().AsNoTracking()
             .Where(d => ids.Contains(d.SalidaId)).OrderBy(d => d.Id).ToListAsync(ct);
         var lookup = details.ToLookup(d => d.SalidaId);
-        var totalPages = (int)Math.Ceiling(count / (double)pageSize);
-        return new PaginatedResult<SalidaResponse>
-        {
-            Page = page, PageSize = pageSize, TotalCount = count, TotalPages = totalPages,
-            HasNext = page < totalPages, HasPrevious = page > 1,
-            Items = rows.Select(s => Respuesta(s, lookup[s.Id])).ToList()
-        };
+        return PaginatedResult<SalidaResponse>.From(
+            rows.Select(s => Respuesta(s, lookup[s.Id])).ToList(), count, page, pageSize);
     }
 
     public async Task<SalidaResponse> ConsultarAsync(int id, int? propietarioId, CancellationToken ct) =>

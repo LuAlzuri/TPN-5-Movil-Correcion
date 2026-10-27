@@ -211,13 +211,9 @@ public sealed class AuditoriaService(AppDbContext db)
     {
         Validar(f);
         var count = await query.CountAsync(ct);
-        var pages = (int)Math.Ceiling(count / (double)f.PageSize);
-        return new()
-        {
-            Page = f.Page, PageSize = f.PageSize, TotalCount = count, TotalPages = pages,
-            HasNext = f.Page < pages, HasPrevious = f.Page > 1,
-            Items = await query.Skip((f.Page - 1) * f.PageSize).Take(f.PageSize).ToListAsync(ct)
-        };
+        return PaginatedResult<T>.From(
+            await query.Skip((f.Page - 1) * f.PageSize).Take(f.PageSize).ToListAsync(ct),
+            count, f.Page, f.PageSize);
     }
     private sealed class MovimientoFila
     {
