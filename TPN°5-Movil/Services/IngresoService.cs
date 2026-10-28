@@ -9,7 +9,7 @@ using TPN_5_MOVIL.Exceptions;
 
 namespace TPN_5_MOVIL.Services;
 
-public sealed class IngresoService(AppDbContext db)
+public sealed class IngresoService(AppDbContext db, IAuditoriaAccionesService auditoriaAcciones)
 {
     public async Task<PaginatedResult<IngresoResponse>> ListarAsync(int page, int pageSize,
         int? productoId, int? proveedorId, DateTime? desde, DateTime? hasta, CancellationToken ct)
@@ -147,6 +147,8 @@ public sealed class IngresoService(AppDbContext db)
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.Stock, p => p.Stock + cantidad), ct);
                 if (affected != 1) throw Conflicto("Un producto está eliminado o su stock excedería el máximo permitido.");
             }
+            auditoriaAcciones.Registrar("Confirmar", "Ingreso", id.ToString());
+            await db.SaveChangesAsync(ct);
             return await ConsultarAsync(id, ct);
         }, ct);
 
@@ -165,6 +167,8 @@ public sealed class IngresoService(AppDbContext db)
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.Stock, p => p.Stock - cantidad), ct);
                 if (affected != 1) throw Conflicto("No se puede revertir el ingreso: el stock de un producto es insuficiente.");
             }
+            auditoriaAcciones.Registrar(header.Confirmado ? "Revertir" : "Eliminar", "Ingreso", id.ToString());
+            await db.SaveChangesAsync(ct);
             return true;
         }, ct);
     }

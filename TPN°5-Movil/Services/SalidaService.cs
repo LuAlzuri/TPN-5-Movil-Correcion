@@ -8,7 +8,7 @@ using TPN_5_MOVIL.Exceptions;
 
 namespace TPN_5_MOVIL.Services;
 
-public sealed class SalidaService(AppDbContext db)
+public sealed class SalidaService(AppDbContext db, IAuditoriaAccionesService auditoriaAcciones)
 {
     public async Task<PaginatedResult<SalidaResponse>> ListarAsync(int? propietarioId, int page, int pageSize,
         int? productoId, int? clienteId, DateTime? desde, DateTime? hasta, CancellationToken ct)
@@ -166,6 +166,8 @@ public sealed class SalidaService(AppDbContext db)
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.Stock, p => p.Stock - detail.Cantidad), ct);
                 if (affected != 1) throw Conflicto("Un producto está eliminado o no tiene stock suficiente; no se confirmó la salida.");
             }
+            auditoriaAcciones.Registrar("Confirmar", "Salida", id.ToString());
+            await db.SaveChangesAsync(ct);
             return await ConsultarAsync(id, null, ct);
         }, ct);
 

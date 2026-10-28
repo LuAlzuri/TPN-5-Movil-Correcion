@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using TPN_5_MOVIL.Data;
 using TPN_5_MOVIL.DTOs;
 using TPN_5_MOVIL.Entities;
 using TPN_5_MOVIL.Services;
@@ -9,7 +11,7 @@ namespace TPN_5_MOVIL.Controllers;
 [ApiController]
 [Route("api/auditoria")]
 [Authorize(Roles = Usuario.RolAdministrador)]
-public sealed class AuditoriaController(AuditoriaService auditoria) : ControllerBase
+public sealed class AuditoriaController(AuditoriaService auditoria, AppDbContext db) : ControllerBase
 {
     [HttpGet("usuarios")]
     public async Task<ActionResult<PaginatedResult<AuditoriaUsuarioResponse>>> Usuarios([FromQuery] AuditoriaUsuariosFiltro filtro, CancellationToken ct) =>
@@ -69,4 +71,57 @@ public sealed class AuditoriaController(AuditoriaService auditoria) : Controller
     [HttpGet("salidas/{id:int}")]
     public async Task<ActionResult<AuditoriaSalidaResponse>> Salida(int id, CancellationToken ct) =>
         Ok(await auditoria.SalidaAsync(id, ct));
+
+    [HttpGet("acciones")]
+    public async Task<IActionResult> GetAcciones([FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        [FromQuery] int? usuarioId = null, [FromQuery] string? entidad = null, [FromQuery] string? accion = null,
+        [FromQuery] DateTime? desde = null, [FromQuery] DateTime? hasta = null, CancellationToken ct = default)
+    {
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize < 1 ? 20 : pageSize > 100 ? 100 : pageSize;
+        var query = db.AuditoriaAcciones.AsNoTracking().AsQueryable();
+        if (usuarioId.HasValue) query = query.Where(a => a.UsuarioId == usuarioId.Value);
+        if (!string.IsNullOrWhiteSpace(entidad)) query = query.Where(a => a.Entidad == entidad.Trim());
+        if (!string.IsNullOrWhiteSpace(accion)) query = query.Where(a => a.Accion == accion.Trim());
+        if (desde.HasValue) query = query.Where(a => a.FechaUtc >= desde.Value);
+        if (hasta.HasValue) query = query.Where(a => a.FechaUtc <= hasta.Value);
+        var total = await query.CountAsync(ct);
+        var items = await query.OrderByDescending(a => a.FechaUtc).ThenByDescending(a => a.Id)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(a => new
+            {
+                a.Id,
+                a.UsuarioId,
+                a.UsuarioEmail,
+                a.Accion,
+                a.Entidad,
+                a.EntidadId,
+                a.FechaUtc,
+                a.Ip,
+                a.Observacion
+            })
+            .ToListAsync(ct);
+        return Ok(new { items, total, page, pageSize });
+    }
+
+    [HttpGet("acciones/{id:long}")]
+    public async Task<IActionResult> GetAccion(long id, CancellationToken ct)
+    {
+        var item = await db.AuditoriaAcciones.AsNoTracking().Where(a => a.Id == id)
+            .Select(a => new
+            {
+                a.Id,
+                a.UsuarioId,
+                a.UsuarioEmail,
+                a.Accion,
+                a.Entidad,
+                a.EntidadId,
+                a.FechaUtc,
+                a.Ip,
+                a.Observacion
+            })
+            .FirstOrDefaultAsync(ct);
+        if (item is null) return NotFound();
+        return Ok(item);
+    }
 }
