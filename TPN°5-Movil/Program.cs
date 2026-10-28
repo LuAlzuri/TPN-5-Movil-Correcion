@@ -39,9 +39,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 var jwt = JwtSettings.Load(builder.Configuration);
 builder.Services.AddSingleton(jwt);
+var smtpSettings = SmtpSettings.Load(builder.Configuration);
+builder.Services.AddSingleton(smtpSettings);
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<AuditoriaService>();
 builder.Services.AddSingleton<IReportePdfService, ReportePdfService>();
+builder.Services.AddScoped<IServicioCorreo, ServicioCorreoSmtp>();
 builder.Services.AddScoped<SalidaService>();
 builder.Services.AddScoped<IngresoService>();
 builder.Services.AddScoped<ImagenProductoService>();
