@@ -15,6 +15,8 @@ using TPN_5_MOVIL.DTOs;
 using TPN_5_MOVIL.Entities;
 
 var bootstrapMode = args.Contains("--crear-administrador", StringComparer.Ordinal);
+// Exclusively academic use confirmed by the project owner. Reassess before other uses.
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 var builder = WebApplication.CreateBuilder(args.Where(a => a != "--crear-administrador").ToArray());
 
 // Resolve configuration when the host is built, including test-host overrides.
@@ -39,6 +41,7 @@ var jwt = JwtSettings.Load(builder.Configuration);
 builder.Services.AddSingleton(jwt);
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<AuditoriaService>();
+builder.Services.AddSingleton<IReportePdfService, ReportePdfService>();
 builder.Services.AddScoped<SalidaService>();
 builder.Services.AddScoped<IngresoService>();
 builder.Services.AddScoped<ImagenProductoService>();
