@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Components.Authorization;
 using Apinventario.App.Services.Infrastructure;
 using Apinventario.App.Services.Administracion;
+using Apinventario.App.Services.Comercio;
 
 namespace Apinventario.App;
 
@@ -38,6 +39,7 @@ public static class MauiProgram
 		builder.Services.AddSingleton<AdminClient>();
 		builder.Services.AddSingleton<AuditClient>();
 		builder.Services.AddSingleton<ReportsClient>();
+		builder.Services.AddComercio();
 
 #if DEBUG
 		builder.Services.AddBlazorWebViewDeveloperTools();

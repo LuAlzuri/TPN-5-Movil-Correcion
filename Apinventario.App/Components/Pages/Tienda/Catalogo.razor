@@ -1,0 +1,142 @@
+@page "/tienda"
+@attribute [Authorize(Roles = "Cliente")]
+@inject CatalogoClient Client
+@inject ApiConfig Config
+@inject TiendaState State
+@implements IDisposable
+<h1>Catálogo</h1>
+<p class="muted">Elegí un producto para ver su detalle y disponibilidad.</p>
+
+<form class="filters" @onsubmit="Buscar" @onsubmit:preventDefault>
+    <div>
+        <label for="catalog-search">Buscar por nombre o descripción</label>
+        <input id="catalog-search" class="form-control" maxlength="150" @bind="search" @bind:event="oninput" />
+    </div>
+    <div>
+        <label for="catalog-category">Categoría</label>
+        <select id="catalog-category" class="form-select" @bind="State.CategoriaId" @bind:after="Filtrar">
+            <option value="">Todas</option>
+            @foreach (var category in categories)
+            {
+                <option value="@category.Id">@category.Nombre</option>
+            }
+        </select>
+    </div>
+    <button type="submit" class="btn btn-outline-secondary" disabled="@busy">Buscar</button>
+</form>
+
+<Feedback Busy="busy" Error="@error" />
+@if (error is not null && data is null)
+{
+    <button class="btn btn-outline-secondary" disabled="@busy" @onclick="() => Load(State.Page)">Reintentar</button>
+}
+
+@if (data is not null)
+{
+    @if (data.Items.Count == 0)
+    {
+        <p class="panel">No hay productos para esta búsqueda. Probá con otro texto o categoría.</p>
+    }
+    else
+    {
+        <section class="product-grid" aria-label="Productos">
+            @foreach (var product in data.Items)
+            {
+                <article class="panel product-card">
+                    <ProductoImagen Url="@Config.ResolveImageUrl(product.ImagenUrl)" Alt="@($"Imagen de {product.Nombre}")" />
+                    <h2>@product.Nombre</h2>
+                    <p class="muted">@product.CategoriaNombre</p>
+                    <p class="price">@product.Precio.ToString("C")</p>
+                    @if (product.Stock == 0)
+                    {
+                        <p><span class="badge-state">Sin stock</span></p>
+                    }
+                    else
+                    {
+                        <p class="stock">@product.Stock disponibles</p>
+                        <a class="btn btn-primary" href="@($"/tienda/productos/{product.Id}")">Ver detalle</a>
+                    }
+                </article>
+            }
+        </section>
+        <Pager Page="State.Page" Pages="data.TotalPages" Total="data.TotalCount" Busy="busy" Change="Load" />
+    }
+}
+
+@code {
+    PageResult<ProductoDto>? data;
+    List<CategoriaCatalogoDto> categories = [];
+    string search = "";
+    string? error;
+    bool busy;
+    int requestVersion;
+    CancellationTokenSource lifetime = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        search = State.Busqueda ?? "";
+        try { categories = await Client.CategoriasAsync(lifetime.Token); }
+        catch (ApiFailure ex) { error = ex.Message; }
+        catch (OperationCanceledException) { return; }
+        catch { error = "No se pudieron cargar las categorías."; }
+        await Load(State.Page);
+    }
+
+    Task Buscar()
+    {
+        State.Busqueda = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+        State.Page = 1;
+        return Load(1);
+    }
+
+    Task Filtrar()
+    {
+        State.Page = 1;
+        return Load(1);
+    }
+
+    async Task Load(int number)
+    {
+        var current = ++requestVersion;
+        lifetime.Cancel();
+        lifetime.Dispose();
+        lifetime = new CancellationTokenSource();
+        var token = lifetime.Token;
+        busy = true;
+        error = null;
+        try
+        {
+            var result = await Client.ProductosAsync(number, 12, State.Busqueda, State.CategoriaId, ct: token);
+            if (current != requestVersion) return;
+            data = result;
+            State.Page = number;
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex)
+        {
+            if (current == requestVersion)
+            {
+                error = ex.Message;
+                data = null;
+            }
+        }
+        catch
+        {
+            if (current == requestVersion)
+            {
+                error = "No se pudo cargar el catálogo.";
+                data = null;
+            }
+        }
+        finally
+        {
+            if (current == requestVersion) busy = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        lifetime.Cancel();
+        lifetime.Dispose();
+    }
+}

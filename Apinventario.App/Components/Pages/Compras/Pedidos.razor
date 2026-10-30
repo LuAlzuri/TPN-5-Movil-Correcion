@@ -1,0 +1,91 @@
+@page "/compras/pedidos"
+@attribute [Authorize(Roles = "Cliente")]
+@inject CarritoClient Sales
+@inject CarritoState CarritoState
+@inject NavigationManager Navigation
+
+<h1>Mis pedidos</h1>
+<p class="muted">Seguimiento de tus compras y solicitudes enviadas.</p>
+<Feedback Busy="busy" Error="@error" />
+@if (error is not null && data is null)
+{
+    <button class="btn btn-outline-secondary" disabled="@busy" @onclick="() => Load(page)">Reintentar</button>
+}
+
+@if (data is not null)
+{
+    @if (data.Items.Count == 0)
+    {
+        <p class="panel">Todavía no realizaste pedidos.</p>
+        <a class="btn btn-primary" href="/tienda">Ir al catálogo</a>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Pedido</th><th>Fecha</th><th>Estado</th><th>Productos</th><th>Total</th><th>Acciones</th></tr></thead>
+                <tbody>
+                    @foreach (var sale in data.Items)
+                    {
+                        <tr>
+                            <td>#@sale.Id</td>
+                            <td>@Fecha(sale.Fecha)</td>
+                            <td><span class="badge-state @StatusClass(sale)">@PedidoEstado.De(sale)</span></td>
+                            <td>@sale.Detalles.Count</td>
+                            <td>@sale.Total.ToString("C")</td>
+                            <td>
+                                <div class="actions">
+                                    <a class="btn btn-outline-secondary" href="@($"/compras/pedidos/{sale.Id}")">Ver</a>
+                                    @if (PedidoEstado.EsBorradorActivo(sale))
+                                    {
+                                        <button type="button" class="btn btn-outline-secondary" @onclick="() => EditDraft(sale)">Editar</button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <Pager Page="page" Pages="data.TotalPages" Total="data.TotalCount" Busy="busy" Change="Load" />
+    }
+}
+
+@code {
+    PageResult<SalidaDto>? data;
+    string? error;
+    bool busy;
+    int page = 1;
+
+    protected override Task OnInitializedAsync() => Load(1);
+
+    async Task Load(int number)
+    {
+        if (busy) return;
+        busy = true;
+        error = null;
+        try
+        {
+            data = await Sales.ListarAsync(number, 10);
+            page = number;
+        }
+        catch (ApiFailure ex) { error = ex.Message; data = null; }
+        catch { error = "No se pudieron cargar los pedidos."; data = null; }
+        finally { busy = false; }
+    }
+
+    void EditDraft(SalidaDto sale)
+    {
+        CarritoState.SalidaId = sale.Id;
+        Navigation.NavigateTo("/compras/carrito");
+    }
+
+    static string StatusClass(SalidaDto sale) => sale.Eliminado ? "status-cancelled"
+        : sale.ConfirmarXEmpleado ? "status-accepted"
+        : sale.ConfirmarXCliente ? "status-sent"
+        : "status-draft";
+
+    static string Fecha(DateTime value) => value.Kind == DateTimeKind.Utc
+        ? value.ToLocalTime().ToString("g")
+        : value.ToString("g");
+}

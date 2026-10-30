@@ -1,0 +1,193 @@
+@page "/compras/pedidos/{Id:int}"
+@attribute [Authorize(Roles = "Cliente")]
+@inject CarritoClient Sales
+@inject CatalogoClient Catalogo
+@inject CarritoState CarritoState
+@inject ConfirmService Confirm
+@inject NavigationManager Navigation
+@inject AppErrorLogger Logger
+@implements IDisposable
+
+<h1>Pedido #@Id</h1>
+<Feedback Busy="busy" Error="@error" Message="@message" />
+
+@if (sale is null)
+{
+    @if (!busy && error is not null)
+    {
+        <button class="btn btn-outline-secondary" @onclick="Load">Reintentar</button>
+    }
+}
+else
+{
+    <section class="panel">
+        <div class="order-head">
+            <span class="badge-state @StatusClass(sale)">@PedidoEstado.De(sale)</span>
+            <span class="muted">@Fecha(sale.Fecha)</span>
+        </div>
+        <dl class="detail-grid">
+            <dt>Total</dt>
+            <dd>@sale.Total.ToString("C")</dd>
+            <dt>Productos</dt>
+            <dd>@sale.Detalles.Count</dd>
+            <dt>Confirmación del cliente</dt>
+            <dd>@FechaOpcional(sale.FechaConfirmacionCliente)</dd>
+            <dt>Confirmación operativa</dt>
+            <dd>@FechaOpcional(sale.FechaConfirmacionEmpleado)</dd>
+        </dl>
+
+        @if (sale.Eliminado)
+        {
+            <p class="warn">Este pedido fue cancelado.</p>
+        }
+        else if (sale.ConfirmarXEmpleado)
+        {
+            <p>Pedido aceptado. El stock fue descontado.</p>
+        }
+        else if (sale.ConfirmarXCliente)
+        {
+            <p>Pendiente de aceptación por el personal. El stock todavía no fue descontado.</p>
+        }
+        else
+        {
+            <p>Borrador sin enviar. Todavía podés modificar los productos desde el carrito.</p>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(sale.Observaciones))
+        {
+            <p><strong>Observaciones:</strong> @sale.Observaciones</p>
+        }
+
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Descuento</th><th>Subtotal</th></tr></thead>
+                <tbody>
+                    @foreach (var line in sale.Detalles)
+                    {
+                        var product = ProductoDe(line.ProductoId);
+                        <tr>
+                            <td>
+                                @NombreDe(line)
+                                @if (product is null)
+                                {
+                                    <br /><small class="muted">El producto ya no está disponible.</small>
+                                }
+                            </td>
+                            <td>@line.Cantidad</td>
+                            <td>@line.PrecioUnitario.ToString("C")</td>
+                            <td>@line.DescAplicado.ToString("0.##")%</td>
+                            <td>@line.Subtotal.ToString("C")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <div class="actions">
+        <a class="btn btn-outline-secondary" href="/compras/pedidos">Volver a mis pedidos</a>
+        @if (PedidoEstado.EsBorradorActivo(sale))
+        {
+            <button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="EditDraft">Editar carrito</button>
+        }
+        @if (!sale.ConfirmarXEmpleado && !sale.Eliminado)
+        {
+            <button type="button" class="btn btn-outline-danger" disabled="@busy" @onclick="Cancelar">
+                @(PedidoEstado.EsBorradorActivo(sale) ? "Descartar borrador" : "Cancelar pedido")
+            </button>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [SupplyParameterFromQuery(Name = "enviado")] public bool Enviado { get; set; }
+    SalidaDto? sale;
+    readonly Dictionary<int, ProductoDto> products = [];
+    string? error;
+    string? message;
+    bool busy;
+    CancellationTokenSource lifetime = new();
+
+    protected override Task OnInitializedAsync()
+    {
+        if (Enviado) message = "Pedido enviado. Queda pendiente de aceptación por el personal.";
+        return Load();
+    }
+
+    async Task Load()
+    {
+        busy = true;
+        error = null;
+        try { await Reload(); }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = ex.Message; sale = null; }
+        catch { error = "No se pudo cargar el pedido."; sale = null; }
+        finally { busy = false; }
+    }
+
+    async Task Reload()
+    {
+        var loaded = await Sales.SalidaAsync(Id, lifetime.Token);
+        foreach (var productId in loaded.Detalles.Select(x => x.ProductoId).Distinct())
+        {
+            if (products.ContainsKey(productId)) continue;
+            try { products[productId] = await Catalogo.ProductoAsync(productId, lifetime.Token); }
+            catch (ApiFailure) { }
+        }
+        sale = loaded;
+    }
+
+    async Task Cancelar()
+    {
+        if (sale is null || busy) return;
+        var action = PedidoEstado.EsBorradorActivo(sale) ? "Descartar borrador" : "Cancelar pedido";
+        if (!await Confirm.ConfirmAsync(action, $"Se cancelará el pedido #{sale.Id}.", action)) return;
+
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await Sales.EliminarAsync(sale.Id, lifetime.Token);
+            if (CarritoState.SalidaId == sale.Id) CarritoState.SalidaId = null;
+            message = "Pedido cancelado.";
+            await Reload();
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = "No se pudo cancelar el pedido. " + ex.Message; }
+        catch
+        {
+            error = "No se pudo cancelar el pedido.";
+            await Logger.WriteAsync("Network");
+        }
+        finally { busy = false; }
+    }
+
+    void EditDraft()
+    {
+        if (sale is null) return;
+        CarritoState.SalidaId = sale.Id;
+        Navigation.NavigateTo("/compras/carrito");
+    }
+
+    ProductoDto? ProductoDe(int id) => products.GetValueOrDefault(id);
+    string NombreDe(DetalleSalidaDto line) => ProductoDe(line.ProductoId)?.Nombre ?? $"Producto #{line.ProductoId}";
+
+    static string StatusClass(SalidaDto sale) => sale.Eliminado ? "status-cancelled"
+        : sale.ConfirmarXEmpleado ? "status-accepted"
+        : sale.ConfirmarXCliente ? "status-sent"
+        : "status-draft";
+
+    static string Fecha(DateTime value) => value.Kind == DateTimeKind.Utc
+        ? value.ToLocalTime().ToString("g")
+        : value.ToString("g");
+
+    static string FechaOpcional(DateTime? value) => value.HasValue ? Fecha(value.Value) : "Pendiente";
+
+    public void Dispose()
+    {
+        lifetime.Cancel();
+        lifetime.Dispose();
+    }
+}

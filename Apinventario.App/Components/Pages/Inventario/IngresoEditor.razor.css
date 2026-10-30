@@ -1,0 +1,27 @@
+.order-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.detail-grid {
+    margin: 0 0 16px;
+}
+
+.detail-grid dt,
+.detail-grid dd {
+    margin: 0;
+    padding: 4px 0;
+}
+
+.income-draft {
+    background: #eef1f3;
+    color: #475467;
+}
+
+.income-confirmed {
+    background: #e8f4f2;
+    color: #115e59;
+}

@@ -1,0 +1,257 @@
+@page "/compras/carrito"
+@attribute [Authorize(Roles = "Cliente")]
+@inject CarritoClient Sales
+@inject CatalogoClient Catalogo
+@inject ConfirmService Confirm
+@inject ApiConfig Config
+@inject CarritoState CarritoState
+@inject AppErrorLogger Logger
+@implements IDisposable
+
+<h1>Carrito</h1>
+<p class="muted">El borrador se guarda en el servidor. El stock se descuenta recién al confirmar el pedido.</p>
+<Feedback Busy="busy" Error="@error" Message="@message" />
+
+@if (draft is null)
+{
+    @if (!busy)
+    {
+        <p class="panel">Tu carrito está vacío.</p>
+        <a class="btn btn-primary" href="/tienda">Ir al catálogo</a>
+    }
+}
+else
+{
+    <p class="muted">Borrador #@draft.Id</p>
+    <section class="cart-lines" aria-label="Productos del carrito">
+        @foreach (var line in draft.Detalles)
+        {
+            var product = ProductoDe(line.ProductoId);
+            var stock = product?.Stock;
+            <article class="panel cart-line">
+                <ProductoImagen Url="@Config.ResolveImageUrl(product?.ImagenUrl)" Alt="@($"Imagen de {NombreDe(line)}")" />
+                <div class="line-info">
+                    <h2>@NombreDe(line)</h2>
+                    @if (product is null)
+                    {
+                        <p class="muted">No se pudo cargar el detalle del producto.</p>
+                    }
+                    else
+                    {
+                        <p class="muted">@product.CategoriaNombre</p>
+                        @if (stock == 0)
+                        {
+                            <p class="warn">Sin stock. Quitá el producto o esperá la reposición.</p>
+                        }
+                        else if (stock is int available && line.Cantidad > available)
+                        {
+                            <p class="warn">Solo quedan @available unidades.</p>
+                        }
+                    }
+                </div>
+                <div class="line-price">@line.PrecioUnitario.ToString("C")<small> c/u</small></div>
+                <div class="quantity" aria-label="Cantidad de @NombreDe(line)">
+                    <button type="button" class="btn btn-outline-secondary" disabled="@(busy || lineBusy == line.Id)"
+                            aria-label="Quitar una unidad" @onclick="() => Cambiar(line, line.Cantidad - 1)">-</button>
+                    <span>@line.Cantidad</span>
+                    <button type="button" class="btn btn-outline-secondary"
+                            disabled="@(busy || lineBusy == line.Id || (stock is not null && line.Cantidad >= stock))"
+                            aria-label="Agregar una unidad" @onclick="() => Cambiar(line, line.Cantidad + 1)">+</button>
+                </div>
+                <div class="line-subtotal">@line.Subtotal.ToString("C")</div>
+                <button type="button" class="btn btn-outline-danger" disabled="@(busy || lineBusy == line.Id)"
+                        @onclick="() => Quitar(line)">Quitar</button>
+            </article>
+        }
+    </section>
+
+    <div class="panel cart-summary">
+        <p>Total <strong>@draft.Total.ToString("C")</strong></p>
+        <div class="actions">
+            <a class="btn btn-outline-secondary" href="/tienda">Seguir comprando</a>
+            @if (draft.Detalles.Count > 0)
+            {
+                <a class="btn btn-primary" href="@($"/compras/pago/{draft.Id}")">Continuar al pago</a>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    SalidaDto? draft;
+    readonly Dictionary<int, ProductoDto> products = [];
+    string? error;
+    string? message;
+    bool busy;
+    int? lineBusy;
+    CancellationTokenSource lifetime = new();
+
+    protected override Task OnInitializedAsync() => Load();
+
+    async Task Load()
+    {
+        busy = true;
+        error = null;
+        try { await FindAndLoad(lifetime.Token); }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = ex.Message; }
+        catch { error = "No se pudo cargar el carrito."; }
+        finally { busy = false; }
+    }
+
+    async Task FindAndLoad(CancellationToken token)
+    {
+        SalidaDto? found = null;
+        if (CarritoState.SalidaId is int id)
+        {
+            try
+            {
+                var current = await Sales.SalidaAsync(id, token);
+                if (PedidoEstado.EsBorradorActivo(current)) found = current;
+            }
+            catch (ApiFailure ex) when (ex.StatusCode == 404) { }
+        }
+
+        if (found is null)
+            found = (await Sales.ListarBorradoresAsync(ct: token)).FirstOrDefault();
+
+        if (found is null)
+        {
+            draft = null;
+            CarritoState.SalidaId = null;
+            return;
+        }
+
+        CarritoState.SalidaId = found.Id;
+        await Apply(found, token);
+    }
+
+    async Task Apply(SalidaDto sale, CancellationToken token)
+    {
+        foreach (var productId in sale.Detalles.Select(x => x.ProductoId).Distinct())
+        {
+            if (products.ContainsKey(productId)) continue;
+            try { products[productId] = await Catalogo.ProductoAsync(productId, token); }
+            catch (ApiFailure) { }
+        }
+        draft = sale;
+    }
+
+    async Task Reload(int id, CancellationToken token)
+    {
+        var sale = await Sales.SalidaAsync(id, token);
+        if (!PedidoEstado.EsBorradorActivo(sale))
+        {
+            draft = null;
+            CarritoState.SalidaId = null;
+            return;
+        }
+        await Apply(sale, token);
+    }
+
+    async Task Cambiar(DetalleSalidaDto line, int quantity)
+    {
+        if (draft is null || busy) return;
+        if (quantity <= 0)
+        {
+            await Quitar(line);
+            return;
+        }
+
+        var stock = ProductoDe(line.ProductoId)?.Stock;
+        if (stock is int available && quantity > available)
+        {
+            error = $"Solo hay {available} unidades disponibles de {NombreDe(line)}.";
+            return;
+        }
+
+        busy = true;
+        lineBusy = line.Id;
+        error = null;
+        message = null;
+        try
+        {
+            await Sales.EditarDetalleAsync(draft.Id, line.Id, quantity, lifetime.Token);
+            await Reload(draft.Id, lifetime.Token);
+            message = "Cantidad actualizada.";
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex)
+        {
+            error = "No se pudo actualizar la cantidad. " + ex.Message;
+            if (ex.StatusCode == 409) await ReloadIfPossible(draft.Id);
+        }
+        catch
+        {
+            error = "No se pudo actualizar la cantidad.";
+            await Logger.WriteAsync("Network");
+        }
+        finally
+        {
+            busy = false;
+            lineBusy = null;
+        }
+    }
+
+    async Task Quitar(DetalleSalidaDto line)
+    {
+        if (draft is null || busy) return;
+        if (!await Confirm.ConfirmAsync("Quitar producto",
+            $"Se quitará {NombreDe(line)} del carrito.", "Quitar")) return;
+
+        busy = true;
+        lineBusy = line.Id;
+        error = null;
+        message = null;
+        try
+        {
+            await Sales.QuitarDetalleAsync(draft.Id, line.Id, lifetime.Token);
+            var sale = await Sales.SalidaAsync(draft.Id, lifetime.Token);
+            if (sale.Detalles.Count == 0)
+            {
+                await Sales.EliminarAsync(draft.Id, lifetime.Token);
+                draft = null;
+                CarritoState.SalidaId = null;
+                message = "Producto quitado. El carrito quedó vacío.";
+            }
+            else
+            {
+                await Apply(sale, lifetime.Token);
+                message = "Producto quitado del carrito.";
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex)
+        {
+            error = "No se pudo quitar el producto. " + ex.Message;
+            await ReloadIfPossible(draft?.Id);
+        }
+        catch
+        {
+            error = "No se pudo quitar el producto.";
+            await Logger.WriteAsync("Network");
+        }
+        finally
+        {
+            busy = false;
+            lineBusy = null;
+        }
+    }
+
+    async Task ReloadIfPossible(int? id)
+    {
+        if (id is not int saleId) return;
+        try { await Reload(saleId, lifetime.Token); }
+        catch (ApiFailure) { }
+        catch (OperationCanceledException) { }
+    }
+
+    ProductoDto? ProductoDe(int id) => products.GetValueOrDefault(id);
+    string NombreDe(DetalleSalidaDto line) => ProductoDe(line.ProductoId)?.Nombre ?? $"Producto #{line.ProductoId}";
+
+    public void Dispose()
+    {
+        lifetime.Cancel();
+        lifetime.Dispose();
+    }
+}

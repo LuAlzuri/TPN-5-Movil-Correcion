@@ -1,0 +1,108 @@
+@page "/inventario/proveedores"
+@attribute [Authorize(Roles = "Administrador,Empleado")]
+@inject ProveedoresClient Client
+@inject ConfirmService Confirm
+
+<h1>Proveedores</h1>
+<p class="muted">Datos de contacto para las compras e ingresos de mercadería.</p>
+<form class="filters" @onsubmit="Search" @onsubmit:preventDefault>
+    <div>
+        <label for="provider-search">Buscar por nombre, CUIT o email</label>
+        <input id="provider-search" class="form-control" @bind="search" />
+    </div>
+    <button type="submit" class="btn btn-outline-secondary" disabled="@busy">Buscar</button>
+    <a class="btn btn-primary" href="/inventario/proveedores/nuevo">Nuevo proveedor</a>
+</form>
+<Feedback Busy="busy" Error="@error" Message="@message" />
+@if (error is not null && data is null)
+{
+    <button class="btn btn-outline-secondary" disabled="@busy" @onclick="() => Load(page)">Reintentar</button>
+}
+
+@if (data is not null)
+{
+    @if (data.Items.Count == 0)
+    {
+        <p class="panel">No hay proveedores para esta búsqueda.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Proveedor</th><th>CUIT</th><th>Contacto</th><th>Acciones</th></tr></thead>
+                <tbody>
+                    @foreach (var provider in data.Items)
+                    {
+                        <tr>
+                            <td>@provider.Nombre</td>
+                            <td>@provider.CUIT</td>
+                            <td>
+                                @if (!string.IsNullOrWhiteSpace(provider.Email)) { <div>@provider.Email</div> }
+                                @if (!string.IsNullOrWhiteSpace(provider.Telefono)) { <div>@provider.Telefono</div> }
+                                @if (string.IsNullOrWhiteSpace(provider.Email) && string.IsNullOrWhiteSpace(provider.Telefono))
+                                {
+                                    <span class="muted">Sin datos</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="actions">
+                                    <a class="btn btn-outline-secondary" href="@($"/inventario/proveedores/{provider.Id}")">Ver / editar</a>
+                                    <button type="button" class="btn btn-outline-danger" disabled="@busy" @onclick="() => Delete(provider)">Dar de baja</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <Pager Page="page" Pages="data.TotalPages" Total="data.TotalCount" Busy="busy" Change="Load" />
+    }
+}
+
+@code {
+    PageResult<ProveedorDto>? data;
+    string search = "";
+    string? error;
+    string? message;
+    bool busy;
+    int page = 1;
+
+    protected override Task OnInitializedAsync() => Load(1);
+
+    Task Search() => Load(1);
+
+    async Task Load(int number)
+    {
+        if (busy) return;
+        busy = true;
+        error = null;
+        try
+        {
+            data = await Client.ListarAsync(number, 10, string.IsNullOrWhiteSpace(search) ? null : search.Trim());
+            page = number;
+        }
+        catch (ApiFailure ex) { error = ex.Message; data = null; }
+        catch { error = "No se pudieron cargar los proveedores."; data = null; }
+        finally { busy = false; }
+    }
+
+    async Task Delete(ProveedorDto provider)
+    {
+        if (busy || !await Confirm.ConfirmAsync("Dar de baja",
+            $"Se dará de baja a {provider.Nombre}. El historial de ingresos se conservará.", "Dar de baja")) return;
+
+        var target = data is not null && data.Items.Count == 1 && page > 1 ? page - 1 : page;
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await Client.EliminarAsync(provider.Id);
+            message = "Proveedor dado de baja.";
+        }
+        catch (ApiFailure ex) { error = ex.Message; }
+        catch { error = "No se pudo dar de baja el proveedor."; }
+        finally { busy = false; }
+        if (error is null) await Load(target);
+    }
+}

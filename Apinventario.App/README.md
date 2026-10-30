@@ -2,9 +2,9 @@
 
 Estructura de carpetas para el frontend del TP6, inspirada en InventarioApp del repositorio https://github.com/AgusBuss/tienda-de-negocios- y adaptada a los dos planes de trabajo.
 
-Esta carpeta contiene el proyecto MAUI Blazor Hybrid Android del Plan 1, con acceso, roles, administración, auditoría y reportes. La solución raíz `Apinventario.slnx` agrupa esta app y la API. Los tres roles comparten la misma app. Las pantallas de comercio corresponden al Plan 2 y se integran en las carpetas asignadas.
+Esta carpeta contiene el proyecto MAUI Blazor Hybrid Android de los Planes 1 y 2, con acceso, roles, administración, auditoría, reportes, catálogo, compras e inventario. La solución raíz `Apinventario.slnx` agrupa esta app y la API. Los tres roles comparten la misma app.
 
-Los contratos compartidos, instrucciones de ejecución, mapa HTTP y análisis de normalización están en `docs/tp6/agente-1/`, desde la raíz. Los `.gitkeep` conservan carpetas todavía vacías. No generar otra plantilla sobre este proyecto.
+Los contratos compartidos, instrucciones de ejecución, mapa HTTP y análisis de normalización del Plan 1 están en `docs/tp6/agente-1/`, desde la raíz. La integración, validación y ejecución del Plan 2 están en `docs/tp6/agente-2/`. No generar otra plantilla sobre este proyecto.
 
 ## Reparto de trabajo
 

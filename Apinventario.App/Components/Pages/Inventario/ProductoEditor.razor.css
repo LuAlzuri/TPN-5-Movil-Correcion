@@ -1,0 +1,12 @@
+.image-editor {
+    display: grid;
+    grid-template-columns: minmax(180px, 280px) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+
+@media (max-width: 650px) {
+    .image-editor {
+        grid-template-columns: 1fr;
+    }
+}

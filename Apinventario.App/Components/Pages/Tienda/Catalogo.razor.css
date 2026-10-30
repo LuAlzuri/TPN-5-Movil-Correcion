@@ -1,0 +1,35 @@
+.product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 16px;
+}
+
+.product-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 0;
+}
+
+.product-card h2 {
+    margin: 4px 0 0;
+    font-size: 1.1rem;
+}
+
+.product-card p {
+    margin: 0;
+}
+
+.product-card .price {
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.product-card .btn {
+    margin-top: auto;
+}
+
+.stock {
+    color: var(--app-primary);
+    font-weight: 600;
+}
