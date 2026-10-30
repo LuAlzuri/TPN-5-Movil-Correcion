@@ -16,6 +16,41 @@ namespace TPN5.Integration;
 public sealed class CriticalScenarios(SqlServerFixture sql)
 {
     [Fact]
+    public async Task Registro_publico_crea_cliente_y_bloquea_roles_de_personal()
+    {
+        await using var app = await sql.CreateApplicationAsync();
+        using var response = await app.SendAsync(HttpMethod.Post, "/api/auth/register", body: new
+        {
+            nombre = "Cliente", apellido = "Publico", cuit = "56789",
+            email = "publico@example.test", password = app.Password,
+            telefono = "123456", direccion = "Calle 123"
+        });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = (await response.Content.ReadFromJsonAsync<UsuarioDto>())!;
+        Assert.Equal(Usuario.RolCliente, created.Rol);
+        var client = await app.LoginAsync(created.Email);
+        await app.DatabaseAsync(async db =>
+        {
+            Assert.True(await db.Clientes.AnyAsync(c => c.Id == client.Id));
+            Assert.False(await db.Empleados.AnyAsync(e => e.Id == client.Id));
+        });
+
+        await app.LoginAdminAsync();
+        var employee = await app.RegisterAsync(Usuario.RolEmpleado);
+        foreach (var actor in new TestAccount?[] { null, client, employee })
+        foreach (var role in new[] { Usuario.RolEmpleado, Usuario.RolAdministrador })
+            await app.StatusAsync(HttpMethod.Post, "/api/auth/register", HttpStatusCode.Forbidden, actor, new
+            {
+                nombre = "Personal", apellido = "Bloqueado", cuit = "67890",
+                email = "bloqueado@example.test", password = app.Password,
+                rol = role, fechaIngreso = role == Usuario.RolEmpleado ? "2026-01-01" : null
+            });
+        await app.RegisterAsync(Usuario.RolAdministrador);
+        await app.DatabaseAsync(async db =>
+            Assert.False(await db.Usuarios.AnyAsync(u => u.Email == "bloqueado@example.test")));
+    }
+
+    [Fact]
     public async Task Login_correcto_y_credenciales_invalidas_sin_enumerar_cuentas()
     {
         await using var app = await sql.CreateApplicationAsync();

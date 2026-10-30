@@ -1,0 +1,95 @@
+@page "/registro"
+@inject ApiClient Api
+@inject SessionService Session
+@inject NavigationManager Nav
+@inject AppErrorLogger Logger
+@implements IDisposable
+
+<section class="panel login-panel">
+    <p class="eyebrow">TU NEGOCIO, EN ORDEN</p>
+    <h1>Crear cuenta</h1>
+    <p class="muted">Registrate como cliente para realizar tus pedidos.</p>
+    <Feedback Busy="busy" Error="@error" Message="@message" />
+    @if (registered)
+    {
+        <a class="btn btn-primary w-100" href="/login">Iniciar sesión</a>
+    }
+    else
+    {
+        <form @onsubmit="RegisterAsync" @onsubmit:preventDefault>
+            <fieldset disabled="@busy">
+                <label for="register-name">Nombre</label>
+                <input id="register-name" class="form-control" autocomplete="given-name" required maxlength="150" @bind="nombre" />
+                <label for="register-lastname">Apellido</label>
+                <input id="register-lastname" class="form-control" autocomplete="family-name" required maxlength="150" @bind="apellido" />
+                <label for="register-cuit">CUIT/CUIL</label>
+                <input id="register-cuit" class="form-control" required maxlength="20" @bind="cuit" />
+                <label for="register-email">Email</label>
+                <input id="register-email" class="form-control" type="email" autocomplete="email" required maxlength="150" @bind="email" />
+                <label for="register-phone">Teléfono (opcional)</label>
+                <input id="register-phone" class="form-control" type="tel" autocomplete="tel" maxlength="50" @bind="telefono" />
+                <label for="register-address">Dirección (opcional)</label>
+                <input id="register-address" class="form-control" autocomplete="street-address" maxlength="300" @bind="direccion" />
+                <label for="register-password">Contraseña</label>
+                <input id="register-password" class="form-control" type="@(visible ? "text" : "password")" autocomplete="new-password" required minlength="12" maxlength="128" @bind="password" />
+                <p class="muted">Usá entre 12 y 128 caracteres.</p>
+                <label for="register-confirm">Repetir contraseña</label>
+                <input id="register-confirm" class="form-control" type="@(visible ? "text" : "password")" autocomplete="new-password" required minlength="12" maxlength="128" @bind="confirmation" />
+                <label class="check"><input type="checkbox" @bind="visible" /> Mostrar contraseñas</label>
+                <button type="submit" class="btn btn-primary w-100">@(busy ? "Creando cuenta…" : "Registrarme")</button>
+            </fieldset>
+        </form>
+        <p class="mt-4">¿Ya tenés cuenta? <a href="/login">Iniciá sesión</a></p>
+    }
+</section>
+
+@code {
+    string nombre = "", apellido = "", cuit = "", email = "", telefono = "", direccion = "";
+    string password = "", confirmation = "";
+    string? error, message;
+    bool busy, visible, registered;
+    readonly CancellationTokenSource lifetime = new();
+
+    protected override void OnInitialized()
+    {
+        if (Session.IsAuthenticated) Nav.NavigateTo("/");
+    }
+
+    async Task RegisterAsync()
+    {
+        if (busy || registered) return;
+        error = null;
+        if (string.IsNullOrWhiteSpace(nombre) || string.IsNullOrWhiteSpace(apellido) ||
+            string.IsNullOrWhiteSpace(cuit) || string.IsNullOrWhiteSpace(email))
+        { error = "Completá nombre, apellido, CUIT/CUIL y email."; return; }
+        if (string.IsNullOrWhiteSpace(password) || password.Length is < 12 or > 128)
+        { error = "La contraseña debe tener entre 12 y 128 caracteres."; return; }
+        if (password != confirmation)
+        { error = "Las contraseñas no coinciden."; return; }
+
+        busy = true;
+        try
+        {
+            await Api.SendJsonAsync<UserInfo>(HttpMethod.Post, "api/auth/register", new
+            {
+                nombre = nombre.Trim(), apellido = apellido.Trim(), cuit = cuit.Trim(),
+                email = email.Trim(), password, rol = "Cliente",
+                telefono = string.IsNullOrWhiteSpace(telefono) ? null : telefono.Trim(),
+                direccion = string.IsNullOrWhiteSpace(direccion) ? null : direccion.Trim()
+            }, lifetime.Token, authenticated: false);
+            password = confirmation = "";
+            registered = true;
+            message = "Tu cuenta fue creada. Ya podés iniciar sesión.";
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = ex.Message; }
+        catch
+        {
+            await Logger.WriteAsync("Registration");
+            error = "No se pudo completar el registro. Intentá nuevamente.";
+        }
+        finally { busy = false; }
+    }
+
+    public void Dispose() { lifetime.Cancel(); lifetime.Dispose(); }
+}

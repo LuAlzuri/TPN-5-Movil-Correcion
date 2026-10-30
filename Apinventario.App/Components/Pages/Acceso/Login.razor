@@ -13,6 +13,7 @@
     @if (wait > 0) { <p role="status">Podés reintentar en @wait segundos.</p> }
     <button type="submit" class="btn btn-primary w-100" disabled="@(busy || wait > 0)">Ingresar</button>
 </form>
+<p class="mt-4">¿No tenes cuenta? <a href="/registro">Registrate</a></p>
 @if (development)
 {
     <details class="mt-4"><summary>Servidor de desarrollo</summary><label for="server">Origen HTTP(S) de la API</label><input id="server" class="form-control" @bind="server" />
