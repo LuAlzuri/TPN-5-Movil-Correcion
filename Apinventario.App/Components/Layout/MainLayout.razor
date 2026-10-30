@@ -1,0 +1,28 @@
+@inherits LayoutComponentBase
+@inject SessionService Session
+@inject NavigationManager Nav
+@implements IDisposable
+<header class="app-header"><a href="/" class="brand">Apinventario</a>
+@if (Session.IsAuthenticated) { <button class="btn btn-outline-secondary" aria-expanded="@menu.ToString().ToLowerInvariant()" @onclick="() => menu = !menu">Menú</button> }
+</header>
+@if (menu && Session.IsAuthenticated)
+{
+    <nav class="app-menu" aria-label="Navegación principal" @onclick="() => menu = false">
+        <p>@Session.CurrentUser?.Nombre · @Session.CurrentUser?.Rol</p>
+        @if (Session.CurrentUser?.Rol == "Cliente")
+        { <NavLink href="/tienda">Catálogo</NavLink><NavLink href="/compras/carrito">Carrito</NavLink><NavLink href="/compras/pedidos">Mis pedidos</NavLink> }
+        else
+        { <NavLink href="/inventario">Inicio</NavLink><NavLink href="/inventario/productos">Productos</NavLink><NavLink href="/inventario/ingresos">Ingresos</NavLink><NavLink href="/inventario/solicitudes">Solicitudes</NavLink><NavLink href="/inventario/proveedores">Proveedores</NavLink> }
+        @if (Session.CurrentUser?.Rol == "Administrador")
+        { <NavLink href="/admin/usuarios">Usuarios</NavLink><NavLink href="/admin/categorias">Categorías</NavLink><NavLink href="/admin/auditoria">Auditoría</NavLink><NavLink href="/admin/reportes">Reportes</NavLink> }
+        <button class="btn btn-outline-secondary" @onclick="Logout">Cerrar sesión</button>
+    </nav>
+}
+<main class="app-container"><LoggedErrorBoundary @key="Nav.Uri"><ChildContent>@Body</ChildContent><ErrorContent><section class="panel" role="alert"><h1>No se pudo mostrar la pantalla</h1><p>Volvé al inicio para reintentar.</p><a href="/">Inicio</a></section></ErrorContent></LoggedErrorBoundary></main>
+@code {
+    bool menu;
+    protected override void OnInitialized() => Session.Changed += Changed;
+    void Changed() => _ = InvokeAsync(StateHasChanged);
+    async Task Logout() { await Session.SignOutAsync(); menu = false; }
+    public void Dispose() => Session.Changed -= Changed;
+}

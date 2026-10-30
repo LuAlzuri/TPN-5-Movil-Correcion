@@ -1,0 +1,68 @@
+@page "/admin/usuarios/nuevo"
+@page "/admin/usuarios/{Id:int}"
+@attribute [Authorize(Roles = "Administrador")]
+@inject AdminClient Client
+@inject ConfirmService Confirm
+@inject NavigationManager Nav
+@inject SessionService Session
+<h1>@(Id.HasValue ? "Datos de la cuenta" : "Nueva cuenta")</h1><a href="/admin/usuarios">Volver a usuarios</a>
+<Feedback Busy="busy" Error="@error" Message="@message" />
+@if(loaded)
+{
+<EditForm Model="form" OnValidSubmit="Save"><DataAnnotationsValidator /><ValidationSummary />
+<fieldset class="panel" disabled="@busy"><div class="form-grid">
+<div><label for="u-name">Nombre</label><InputText id="u-name" class="form-control" @bind-Value="form.Nombre" /></div>
+<div><label for="u-last">Apellido</label><InputText id="u-last" class="form-control" @bind-Value="form.Apellido" /></div>
+<div><label for="u-cuit">CUIT</label><InputText id="u-cuit" class="form-control" @bind-Value="form.CUIT" /></div>
+<div><label for="u-email">Email</label><InputText id="u-email" type="email" class="form-control" @bind-Value="form.Email" /></div>
+<div><label for="u-pass">@(Id.HasValue ? "Nueva contraseña (opcional)" : "Contraseña (12 a 128 caracteres)")</label><InputText id="u-pass" type="password" autocomplete="new-password" class="form-control" @bind-Value="form.Password" /></div>
+<div><label for="u-role">Rol</label>@if(Id.HasValue){<p>@form.Rol · No editable</p>}else{<InputSelect id="u-role" class="form-select" @bind-Value="form.Rol"><option>Administrador</option><option>Empleado</option><option>Cliente</option></InputSelect>}</div>
+@if(!Id.HasValue && form.Rol=="Empleado"){<div><label for="u-date">Fecha de ingreso</label><InputDate id="u-date" class="form-control" @bind-Value="form.FechaIngreso" /></div>}
+@if(!Id.HasValue && form.Rol=="Cliente"){<div><label for="u-phone">Teléfono</label><InputText id="u-phone" class="form-control" @bind-Value="form.Telefono" /></div><div><label for="u-address">Dirección</label><InputText id="u-address" class="form-control" @bind-Value="form.Direccion" /></div>}
+</div><button type="submit" class="btn btn-primary mt-3">@(Id.HasValue ? "Guardar datos generales" : "Crear cuenta")</button></fieldset></EditForm>
+@if(Id.HasValue && form.Rol is "Empleado" or "Cliente")
+{
+<section class="panel"><h2>Perfil @form.Rol</h2><p class="muted">Este guardado actualiza los datos generales anteriores y los campos del perfil. La contraseña se guarda por separado arriba.</p>
+@if(form.Rol=="Empleado"){<label for="p-date">Fecha de ingreso</label><input id="p-date" type="date" class="form-control" @bind="form.FechaIngreso" disabled="@busy" />}
+else{<label for="p-phone">Teléfono</label><input id="p-phone" class="form-control" maxlength="50" @bind="form.Telefono" disabled="@busy" /><label for="p-address">Dirección</label><input id="p-address" class="form-control" maxlength="300" @bind="form.Direccion" disabled="@busy" />}
+<button class="btn btn-outline-secondary mt-3" disabled="@busy" @onclick="SaveProfile">Guardar perfil</button></section>
+}
+}
+else if(!busy){<button class="btn btn-outline-secondary" @onclick="Load">Reintentar</button>}
+@code {
+    [Parameter] public int? Id{get;set;}
+    UserForm form=new();bool busy,loaded;string? error,message;
+    protected override Task OnParametersSetAsync()=>Load();
+    async Task Load()
+    {
+        busy=true;loaded=false;error=null;
+        try
+        {
+            form=new();
+            if(Id is int id)
+            {
+                var u=await Client.UserAsync(id);form=new(){Nombre=u.Nombre,Apellido=u.Apellido,CUIT=u.CUIT,Email=u.Email,Rol=u.Rol};
+                if(u.Rol=="Empleado")form.FechaIngreso=(await Client.EmployeeAsync(id)).FechaIngreso.ToDateTime(TimeOnly.MinValue);
+                if(u.Rol=="Cliente"){var p=await Client.ClientAsync(id);form.Telefono=p.Telefono;form.Direccion=p.Direccion;}
+            }
+            loaded=true;
+        }catch(ApiFailure ex){error=ex.Message;}finally{busy=false;}
+    }
+    async Task Save()
+    {
+        if(busy)return;busy=true;error=null;message=null;
+        try
+        {
+            if(Id is int id){await Client.UpdateUserAsync(id,form);form.Password="";message="Datos guardados.";if(Session.CurrentUser?.Id==id){await Session.SignOutAsync();return;}}
+            else{var u=await Client.CreateUserAsync(form);form.Password="";Nav.NavigateTo($"/admin/usuarios/{u.Id}");}
+        }catch(ApiFailure ex){error=ex.Message;}finally{busy=false;}
+    }
+    async Task SaveProfile()
+    {
+        if(busy || Id is not int id)return;
+        var errors=new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        if(!System.ComponentModel.DataAnnotations.Validator.TryValidateObject(form,new(form),errors,true)){error=string.Join(" ",errors.Select(x=>x.ErrorMessage));return;}
+        busy=true;error=null;message=null;
+        try{await Client.UpdateProfileAsync(id,form);message="Perfil guardado.";}catch(ApiFailure ex){error=ex.Message;}finally{busy=false;}
+    }
+}

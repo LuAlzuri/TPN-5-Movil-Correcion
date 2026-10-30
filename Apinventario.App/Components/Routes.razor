@@ -1,0 +1,40 @@
+@inject SessionService Session
+@inject AppErrorLogger Logger
+@inject NavigationManager Nav
+@implements IDisposable
+@if (loading) { <main class="app-container"><p role="status">Restaurando sesión…</p></main> }
+else if (startupError is not null)
+{
+    <main class="app-container"><h1>No se pudo validar la sesión</h1><p role="alert">@startupError</p>
+    <button class="btn btn-primary" @onclick="Restore">Reintentar</button><button class="btn btn-outline-secondary" @onclick="Forget">Ir al login</button></main>
+}
+else
+{
+    <Router AppAssembly="typeof(MauiProgram).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+                <NotAuthorized>
+                    @if (!Session.IsAuthenticated) { <RedirectLogin /> }
+                    else { <section class="panel"><h1>Acceso no permitido</h1><p>Tu rol no puede abrir esta pantalla.</p><a href="/">Volver al inicio</a></section> }
+                </NotAuthorized>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+        <NotFound><LayoutView Layout="typeof(Layout.MainLayout)"><section class="panel"><h1>Pantalla no disponible</h1><p>El módulo puede estar pendiente de integración.</p><a href="/">Volver al inicio</a></section></LayoutView></NotFound>
+    </Router>
+}
+@code {
+    bool loading = true; string? startupError;
+    protected override async Task OnInitializedAsync() { Session.Changed += Changed; await Restore(); }
+    async Task Restore()
+    {
+        loading = true; startupError = null;
+        try { await Session.RestoreAsync(); }
+        catch (ApiFailure ex) { startupError = ex.Message; }
+        catch { await Logger.WriteAsync("Session"); startupError = "No se pudo recuperar la sesión guardada."; }
+        finally { loading = false; }
+    }
+    async Task Forget() { await Session.SignOutAsync(); startupError = null; Nav.NavigateTo("/login"); }
+    void Changed() => _ = InvokeAsync(() => { if (!loading && !Session.IsAuthenticated) Nav.NavigateTo("/login"); StateHasChanged(); });
+    public void Dispose() => Session.Changed -= Changed;
+}

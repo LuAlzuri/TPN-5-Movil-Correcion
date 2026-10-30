@@ -1,0 +1,28 @@
+@page "/admin/categorias"
+@attribute [Authorize(Roles = "Administrador")]
+@inject AdminClient Client
+@inject ConfirmService Confirm
+<h1>Categorías</h1>
+<form class="filters" @onsubmit="Search" @onsubmit:preventDefault><div><label for="c-search">Buscar</label><input id="c-search" class="form-control" @bind="search" /></div><button class="btn btn-outline-secondary" disabled="@busy">Buscar</button><button type="button" class="btn btn-primary" disabled="@busy" @onclick="New">Nueva categoría</button></form>
+<Feedback Busy="busy" Error="@error" Message="@message" />
+@if(editing)
+{
+<EditForm Model="form" OnValidSubmit="Save"><DataAnnotationsValidator /><ValidationSummary /><fieldset class="panel" disabled="@busy"><h2>@(id.HasValue ? "Editar categoría" : "Nueva categoría")</h2><label for="c-name">Nombre</label><InputText id="c-name" class="form-control" @bind-Value="form.Nombre" /><label for="c-desc">Descripción</label><InputTextArea id="c-desc" class="form-control" @bind-Value="form.Descripcion" /><div class="actions"><button type="submit" class="btn btn-primary">Guardar</button><button type="button" class="btn btn-outline-secondary" @onclick="() => editing=false">Cancelar</button></div></fieldset></EditForm>
+}
+@if(data is not null)
+{
+    @if(data.Items.Count==0){<p class="panel">No hay categorías para esta búsqueda.</p>}
+    @foreach(var category in data.Items){<article class="panel"><h2>@category.Nombre</h2><p>@category.Descripcion</p><p class="muted">Creada: @UiDates.Local(category.FechaCreacion).ToString("g")</p><div class="actions"><button class="btn btn-outline-secondary" disabled="@busy" @onclick="() => Edit(category.Id)">Editar</button><button class="btn btn-outline-danger" disabled="@busy" @onclick="() => Delete(category)">Dar de baja</button></div></article>}
+    <Pager Page="page" Pages="data.TotalPages" Total="data.TotalCount" Busy="busy" Change="Load" />
+}
+else if(!busy){<button class="btn btn-outline-secondary" @onclick="() => Load(page)">Reintentar</button>}
+@code {
+    PageResult<Category>? data;CategoryForm form=new();string search="";string? error,message;int page=1;int? id;bool busy,editing;
+    protected override Task OnInitializedAsync()=>Load(1);
+    Task Search()=>Load(1);
+    void New(){id=null;form=new();editing=true;message=null;error=null;}
+    async Task Load(int number){if(busy)return;busy=true;error=null;try{data=await Client.CategoriesAsync(number,search);page=number;}catch(ApiFailure ex){data=null;error=ex.Message;}finally{busy=false;}}
+    async Task Edit(int categoryId){if(busy)return;busy=true;error=null;try{var c=await Client.CategoryAsync(categoryId);id=c.Id;form=new(){Nombre=c.Nombre,Descripcion=c.Descripcion};editing=true;}catch(ApiFailure ex){error=ex.Message;}finally{busy=false;}}
+    async Task Save(){if(busy)return;busy=true;error=null;message=null;try{if(id.HasValue)await Client.UpdateCategoryAsync(id.Value,form);else await Client.CreateCategoryAsync(form);editing=false;message="Categoría guardada.";}catch(ApiFailure ex){error=ex.Message;}finally{busy=false;}if(error is null)await Load(page);}
+    async Task Delete(Category c){if(busy||!await Confirm.ConfirmAsync("Dar de baja",$"La categoría {c.Nombre} dejará de estar disponible. El historial se conservará.","Dar de baja"))return;busy=true;error=null;message=null;try{await Client.DeleteCategoryAsync(c.Id);message="Categoría dada de baja.";}catch(ApiFailure ex){error=ex.Message;}finally{busy=false;}if(error is null)await Load(page);}
+}

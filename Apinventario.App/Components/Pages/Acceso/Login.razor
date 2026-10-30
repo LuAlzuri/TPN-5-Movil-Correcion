@@ -1,0 +1,51 @@
+@page "/login"
+@inject SessionService Session
+@inject NavigationManager Nav
+@inject ApiConfig Config
+@inject AppErrorLogger Logger
+@implements IDisposable
+<section class="panel login-panel"><p class="eyebrow">TU NEGOCIO, EN ORDEN</p><h1>Iniciar sesión</h1><p class="muted">Ingresá con tu cuenta de Apinventario.</p>
+<form @onsubmit="LoginAsync" @onsubmit:preventDefault>
+    <label for="email">Email</label><input id="email" class="form-control" type="email" autocomplete="username" required maxlength="150" @bind="email" @bind:event="oninput" />
+    <label for="password">Contraseña</label><input id="password" class="form-control" type="@(visible ? "text" : "password")" autocomplete="current-password" required @bind="password" @bind:event="oninput" />
+    <label class="check"><input type="checkbox" @bind="visible" /> Mostrar contraseña</label>
+    <Feedback Busy="busy" Error="@error" />
+    @if (wait > 0) { <p role="status">Podés reintentar en @wait segundos.</p> }
+    <button type="submit" class="btn btn-primary w-100" disabled="@(busy || wait > 0)">Ingresar</button>
+</form>
+@if (development)
+{
+    <details class="mt-4"><summary>Servidor de desarrollo</summary><label for="server">Origen HTTP(S) de la API</label><input id="server" class="form-control" @bind="server" />
+    <button class="btn btn-outline-secondary" disabled="@busy" @onclick="SetServer">Guardar servidor</button><p class="muted">Emulador: http://10.0.2.2:5087. Teléfono: dirección LAN de tu PC.</p></details>
+}
+</section>
+@code {
+    string email = "", password = "", server = ""; string? error; bool busy, visible; int wait;
+    CancellationTokenSource lifetime = new();
+    bool development {
+        get {
+#if DEBUG
+            return true;
+#else
+            return false;
+#endif
+        }
+    }
+    protected override void OnInitialized() { server = Config.BaseUri.ToString(); if (Session.IsAuthenticated) Nav.NavigateTo("/"); }
+    async Task LoginAsync()
+    {
+        if (busy || wait > 0) return; busy = true; error = null;
+        try { await Session.SignInAsync(email.Trim(), password, lifetime.Token); password = ""; Nav.NavigateTo("/", replace: true); }
+        catch (ApiFailure ex) { error = ex.Message; if (ex.StatusCode == 429) _ = Countdown((int)Math.Ceiling(ex.RetryAfter?.TotalSeconds ?? 60)); }
+        catch (OperationCanceledException) { }
+        catch { await Logger.WriteAsync("Session"); error = "No se pudo completar el inicio de sesión."; }
+        finally { busy = false; }
+    }
+    async Task Countdown(int seconds)
+    {
+        try { wait = Math.Max(1, seconds); while (wait > 0) { await InvokeAsync(StateHasChanged); await Task.Delay(1000, lifetime.Token); wait--; } await InvokeAsync(StateHasChanged); }
+        catch (OperationCanceledException) { }
+    }
+    void SetServer() { try { Config.SetDevelopmentAddress(server); error = null; } catch (ArgumentException ex) { error = ex.Message; } }
+    public void Dispose() { lifetime.Cancel(); lifetime.Dispose(); }
+}

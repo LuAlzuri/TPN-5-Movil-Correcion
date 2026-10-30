@@ -1,0 +1,80 @@
+@page "/admin/auditoria"
+@attribute [Authorize(Roles = "Administrador")]
+@using System.Text.Json
+@inject AuditClient Client
+<h1>Auditoría</h1><p class="muted">Consultas de solo lectura. La bitácora de acciones y el historial de entidades tienen distinta cobertura.</p>
+<label for="audit-resource">Consulta</label><select id="audit-resource" class="form-select" disabled="@busy" @bind="resource" @bind:after="Reset"><option value="acciones">Acciones registradas</option><option value="usuarios">Historial de usuarios</option><option value="productos">Historial de productos</option><option value="ingresos">Historial de ingresos</option><option value="salidas">Historial de salidas</option></select>
+<form @onsubmit="Search" @onsubmit:preventDefault><fieldset class="filters panel" disabled="@busy">
+@if(resource=="acciones")
+{
+    <div><label for="actor">Usuario ID</label><input id="actor" type="number" min="1" class="form-control" @bind="userId" /></div>
+    <div><label for="entity">Entidad</label><select id="entity" class="form-select" @bind="entity"><option value="">Todas</option><option>Ingreso</option><option>Salida</option></select></div>
+    <div><label for="action">Acción</label><select id="action" class="form-select" @bind="action"><option value="">Todas</option><option>Confirmar</option><option>Eliminar</option><option>Revertir</option></select></div>
+}
+else
+{
+    <div><label for="deleted">Estado</label><select id="deleted" class="form-select" @bind="deleted"><option value="">Todos</option><option value="false">Activos</option><option value="true">Dados de baja</option></select></div>
+    @if(resource is "usuarios" or "productos"){<div><label for="audit-search">Buscar</label><input id="audit-search" class="form-control" maxlength="300" @bind="search" /></div>}
+    @if(resource=="usuarios"){<div><label for="audit-role">Rol</label><select id="audit-role" class="form-select" @bind="role"><option value="">Todos</option><option>Administrador</option><option>Empleado</option><option>Cliente</option></select></div>}
+    @if(resource=="productos"){<div><label for="audit-cat">Categoría ID</label><input id="audit-cat" class="form-control" type="number" min="1" @bind="categoryId" /></div>}
+    @if(resource is "ingresos" or "salidas")
+    {
+        <div><label for="audit-product">Producto ID</label><input id="audit-product" class="form-control" type="number" min="1" @bind="productId" /></div>
+        <div><label for="audit-counterparty">@(resource=="ingresos"?"Proveedor ID":"Cliente ID")</label><input id="audit-counterparty" class="form-control" type="number" min="1" @bind="counterpartyId" /></div>
+        <div><label for="audit-confirmed">@(resource=="ingresos"?"Confirmado":"Aceptado por personal")</label><select id="audit-confirmed" class="form-select" @bind="confirmed"><option value="">Todos</option><option value="true">Sí</option><option value="false">No</option></select></div>
+        @if(resource=="salidas"){<div><label for="audit-sent">Enviado por cliente</label><select id="audit-sent" class="form-select" @bind="sent"><option value="">Todos</option><option value="true">Sí</option><option value="false">No</option></select></div>}
+    }
+}
+@if(resource is "acciones" or "ingresos" or "salidas")
+{
+    <div><label for="audit-from">Desde (día UTC−03)</label><input id="audit-from" class="form-control" type="date" @bind="from" /></div><div><label for="audit-to">Hasta inclusive (UTC−03)</label><input id="audit-to" class="form-control" type="date" @bind="to" /></div>
+}
+<button class="btn btn-primary" type="submit">Aplicar filtros</button></fieldset></form>
+<Feedback Busy="busy" Error="@error" />
+@if(error is not null){<button class="btn btn-outline-secondary" disabled="@busy" @onclick="() => Load(page)">Reintentar</button>}
+@if(resource=="acciones" && actions is not null)
+{
+    <p class="muted">Registra confirmaciones de ingresos y salidas, bajas de ingresos y reversiones. No es un historial de todo CRUD.</p>
+    @if(actions.Items.Count==0){<p class="panel">No hay eventos con estos filtros.</p>}
+    @foreach(var item in actions.Items){<article class="panel"><span class="badge-state">@item.Accion · @item.Entidad</span><h2 class="mt-2">Registro @item.EntidadId</h2><p>@UiDates.Local(item.FechaUtc).ToString("g") · Usuario #@item.UsuarioId</p><a class="btn btn-outline-secondary" href="@($"/admin/auditoria/acciones/{item.Id}")">Ver evento</a></article>}
+    <Pager Page="page" Pages="actions.TotalPages" Total="actions.Total" Busy="busy" Change="Load" />
+}
+@if(resource!="acciones" && history is not null)
+{
+    @if(history.Items.Count==0){<p class="panel">No hay registros con estos filtros.</p>}
+    @foreach(var item in history.Items){var header=item.TryGetProperty("encabezado",out var h)?h:item;var id=header.GetProperty("id").GetInt32();<article class="panel"><h2>@resource · #@id</h2><RecordFields Value="header" /><a class="btn btn-outline-secondary" href="@($"/admin/auditoria/historial/{resource}/{id}")">Detalle histórico</a></article>}
+    <Pager Page="page" Pages="history.TotalPages" Total="history.TotalCount" Busy="busy" Change="Load" />
+}
+@code {
+    string resource="acciones",entity="",action="",deleted="",search="",role="",confirmed="",sent="";
+    int? userId,categoryId,productId,counterpartyId;DateTime? from,to;bool busy;int page=1;string? error;
+    ActionPage? actions;PageResult<JsonElement>? history;
+    protected override Task OnInitializedAsync()=>Load(1);
+    Task Search()=>Load(1);
+    async Task Reset(){entity=action=deleted=search=role=confirmed=sent="";userId=categoryId=productId=counterpartyId=null;from=to=null;actions=null;history=null;await Load(1);}
+    async Task Load(int number)
+    {
+        if(busy)return;busy=true;error=null;actions=null;history=null;
+        try
+        {
+            if(from>to || to?.Date==DateTime.MaxValue.Date)throw new ApiFailure(400,"Revisá el rango de fechas.");
+            if(resource=="acciones")actions=await Client.ActionsAsync(number,userId,entity,action,from,to);
+            else
+            {
+                var filters=new List<(string Key,object? Value)>{("eliminado",deleted)};
+                if(resource is "usuarios" or "productos")filters.Add(("busqueda",search));
+                if(resource=="usuarios")filters.Add(("rol",role));
+                if(resource=="productos")filters.Add(("categoriaId",categoryId));
+                if(resource is "ingresos" or "salidas")
+                {
+                    filters.Add(("productoId",productId));filters.Add((resource=="ingresos"?"proveedorId":"clienteId",counterpartyId));
+                    filters.Add((resource=="ingresos"?"confirmado":"confirmarXEmpleado",confirmed));
+                    if(resource=="salidas")filters.Add(("confirmarXCliente",sent));
+                    filters.Add(("desde",AuditClient.Start(from)));filters.Add(("hasta",AuditClient.End(to)));
+                }
+                history=await Client.HistoryAsync(resource,number,filters);
+            }
+            page=number;
+        }catch(ApiFailure ex){error=ex.Message;}finally{busy=false;}
+    }
+}

@@ -1,0 +1,14 @@
+@page "/admin/auditoria/acciones/{Id:long}"
+@attribute [Authorize(Roles = "Administrador")]
+@inject AuditClient Client
+<h1>Evento de auditoría</h1><a href="/admin/auditoria">Volver a auditoría</a><Feedback Busy="busy" Error="@error" />
+@if(item is not null)
+{
+<section class="panel"><h2>@item.Accion · @item.Entidad #@item.EntidadId</h2><dl class="detail-grid">
+<div><dt>Evento ID</dt><dd>@item.Id</dd></div><div><dt>Fecha local</dt><dd>@UiDates.Local(item.FechaUtc).ToString("g")</dd></div>
+<div><dt>Usuario ID</dt><dd>@item.UsuarioId</dd></div><div><dt>Email histórico</dt><dd>@(item.UsuarioEmail??"—")</dd></div><div><dt>IP</dt><dd>@(item.Ip??"—")</dd></div><div><dt>Observación</dt><dd>@(item.Observacion??"—")</dd></div></dl>
+@if(int.TryParse(item.EntidadId,out var recordId) && item.Entidad is "Ingreso" or "Salida"){<a class="btn btn-outline-secondary" href="@($"/admin/auditoria/historial/{(item.Entidad=="Ingreso"?"ingresos":"salidas")}/{recordId}")">Ver registro de origen</a>}
+</section>
+}
+else if(!busy){<button class="btn btn-outline-secondary" @onclick="Load">Reintentar</button>}
+@code{[Parameter]public long Id{get;set;}AuditAction? item;bool busy;string? error;protected override Task OnParametersSetAsync()=>Load();async Task Load(){busy=true;error=null;item=null;try{item=await Client.ActionAsync(Id);}catch(ApiFailure ex){error=ex.Message;}finally{busy=false;}}}
