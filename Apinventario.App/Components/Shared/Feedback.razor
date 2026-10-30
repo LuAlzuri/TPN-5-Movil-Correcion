@@ -1,0 +1,8 @@
+@if (Busy) { <p role="status" aria-live="polite">Procesando…</p> }
+@if (!string.IsNullOrWhiteSpace(Error)) { <div class="alert alert-danger" role="alert">@Error</div> }
+@if (!string.IsNullOrWhiteSpace(Message)) { <div class="alert alert-success" role="status">@Message</div> }
+@code {
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public string? Message { get; set; }
+}

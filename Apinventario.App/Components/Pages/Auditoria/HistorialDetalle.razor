@@ -1,0 +1,21 @@
+@page "/admin/auditoria/historial/{Resource}/{Id:int}"
+@attribute [Authorize(Roles = "Administrador")]
+@using System.Text.Json
+@inject AuditClient Client
+<h1>Detalle histórico</h1><a href="/admin/auditoria">Volver a auditoría</a><Feedback Busy="busy" Error="@error" />
+@if(record is JsonElement data){<section class="panel"><RecordFields Value="data" /></section>}
+@if(Resource=="productos" && record is not null)
+{
+<h2>Movimientos y efecto vigente</h2>
+<form class="filters" @onsubmit="Search" @onsubmit:preventDefault><fieldset disabled="@busy"><label for="movement-type">Tipo</label><select id="movement-type" class="form-select" @bind="type"><option value="">Todos</option><option>Ingreso</option><option>Salida</option></select><label for="move-from">Desde (UTC−03)</label><input id="move-from" class="form-control" type="date" @bind="from" /><label for="move-to">Hasta inclusive (UTC−03)</label><input id="move-to" class="form-control" type="date" @bind="to" /><button class="btn btn-outline-secondary mt-2">Filtrar movimientos</button></fieldset></form>
+@if(moves is not null){@if(moves.Items.Count==0){<p class="panel">Sin movimientos.</p>}@foreach(var move in moves.Items){<article class="panel"><RecordFields Value="move" /></article>}<Pager Page="page" Pages="moves.TotalPages" Total="moves.TotalCount" Busy="busy" Change="Movements" />}
+}
+@if(error is not null){<button class="btn btn-outline-secondary" disabled="@busy" @onclick="Load">Reintentar</button>}
+@code {
+    [Parameter]public string Resource{get;set;}="";[Parameter]public int Id{get;set;}
+    JsonElement? record;PageResult<JsonElement>? moves;bool busy;string? error;string type="";DateTime? from,to;int page=1;
+    protected override Task OnParametersSetAsync()=>Load();
+    async Task Load(){busy=true;error=null;record=null;moves=null;try{record=await Client.DetailAsync(Resource,Id);}catch(ApiFailure ex){error=ex.Message;}catch(ArgumentException ex){error=ex.Message;}finally{busy=false;}if(Resource=="productos"&&record is not null)await Movements(1);}
+    Task Search()=>Movements(1);
+    async Task Movements(int number){if(busy)return;busy=true;error=null;moves=null;try{if(from>to||to?.Date==DateTime.MaxValue.Date)throw new ApiFailure(400,"Revisá las fechas.");moves=await Client.MovementsAsync(Id,number,type,from,to);page=number;}catch(ApiFailure ex){error=ex.Message;}finally{busy=false;}}
+}

@@ -1,0 +1,4 @@
+@page "/"
+@inject SessionService Session
+@inject NavigationManager Nav
+@code { protected override void OnInitialized() => Nav.NavigateTo(!Session.IsAuthenticated ? "/login" : Session.CurrentUser?.Rol == "Cliente" ? "/tienda" : "/inventario", replace: true); }

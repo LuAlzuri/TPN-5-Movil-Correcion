@@ -1,0 +1,32 @@
+@page "/admin/usuarios"
+@attribute [Authorize(Roles = "Administrador")]
+@inject AdminClient Client
+@inject ConfirmService Confirm
+@inject SessionService Session
+<h1>Usuarios y roles</h1><p class="muted">Cuentas activas. Las bajas se consultan en Auditoría.</p>
+<form class="filters" @onsubmit="Search" @onsubmit:preventDefault><div><label for="users-search">Buscar por nombre, email o CUIT</label><input id="users-search" class="form-control" @bind="search" /></div><button class="btn btn-outline-secondary" disabled="@busy">Buscar</button><a class="btn btn-primary" href="/admin/usuarios/nuevo">Nueva cuenta</a></form>
+<Feedback Busy="busy" Error="@error" Message="@message" />
+@if(error is not null){<button class="btn btn-outline-secondary" disabled="@busy" @onclick="() => Load(page)">Reintentar</button>}
+@if(data is not null)
+{
+    @if(data.Items.Count==0){<p class="panel">No hay cuentas para esta búsqueda.</p>}
+    else {<div class="table-wrap"><table class="table"><thead><tr><th>Nombre</th><th>Rol</th><th>Acciones</th></tr></thead><tbody>
+        @foreach(var user in data.Items){<tr><td>@user.Nombre @user.Apellido<br /><small>@user.Email</small></td><td>@user.Rol</td><td><div class="actions"><a class="btn btn-outline-secondary" href="@($"/admin/usuarios/{user.Id}")">Ver / editar</a><button class="btn btn-outline-danger" disabled="@busy" @onclick="() => Delete(user)">Dar de baja</button></div></td></tr>}
+    </tbody></table></div>}
+    <Pager Page="page" Pages="data.TotalPages" Total="data.TotalCount" Busy="busy" Change="Load" />
+}
+@code {
+    PageResult<UserInfo>? data;string search="";string? error,message;bool busy;int page=1;
+    protected override Task OnInitializedAsync()=>Load(1);
+    Task Search()=>Load(1);
+    async Task Load(int number){if(busy)return;busy=true;error=null;try{data=await Client.UsersAsync(number,search);page=number;}catch(ApiFailure ex){error=ex.Message;data=null;}finally{busy=false;}}
+    async Task Delete(UserInfo user)
+    {
+        if(busy || !await Confirm.ConfirmAsync("Dar de baja",$"Se deshabilitará la cuenta de {user.Nombre} {user.Apellido}. Su historia se conservará.","Dar de baja"))return;
+        busy=true;error=null;message=null;
+        try{await Client.DeleteUserAsync(user.Id);message="Cuenta dada de baja.";if(Session.CurrentUser?.Id==user.Id)await Session.SignOutAsync();}
+        catch(ApiFailure ex){error=ex.Message;}
+        finally{busy=false;}
+        if(error is null && Session.IsAuthenticated)await Load(page);
+    }
+}

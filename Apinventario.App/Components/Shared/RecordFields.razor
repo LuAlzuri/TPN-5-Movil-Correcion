@@ -1,0 +1,35 @@
+@using System.Text.Json
+@if(Value.ValueKind==JsonValueKind.Object)
+{
+    <dl class="detail-grid">
+    @foreach(var field in Value.EnumerateObject())
+    {
+        <div><dt>@Label(field.Name)</dt><dd>
+        @if(field.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array){<RecordFields Value="field.Value" />}
+        else if(field.Value.ValueKind==JsonValueKind.True){<span>Sí</span>}
+        else if(field.Value.ValueKind==JsonValueKind.False){<span>No</span>}
+        else if(field.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined){<span>—</span>}
+        else { @Display(field.Name,field.Value) }
+        </dd></div>
+    }
+    </dl>
+}
+else if(Value.ValueKind==JsonValueKind.Array)
+{
+    @if(Value.GetArrayLength()==0){<p>Sin detalles.</p>}
+    @foreach(var item in Value.EnumerateArray()){<section class="panel"><RecordFields Value="item" /></section>}
+}
+@code {
+    [Parameter] public JsonElement Value{get;set;}
+    static string Label(string key)=>key switch {
+        "id"=>"ID","usuarioId"=>"Usuario ID","usuarioEmail"=>"Email del actor","entidadId"=>"Registro de origen","fechaUtc"=>"Fecha (local)",
+        "impactoStockVigente"=>"Impacto vigente en stock","confirmarXEmpleado"=>"Aceptado por personal","confirmarXCliente"=>"Enviado por cliente",
+        "usuarioConfirmacion"=>"Usuario que aceptó","empleadoCreador"=>"Empleado creador","empleadoConfirmacion"=>"Empleado que confirmó",
+        "eliminado"=>"Dado de baja","cuit"=>"CUIT","ip"=>"IP","tienePerfilEmpleado"=>"Perfil empleado","tienePerfilCliente"=>"Perfil cliente",
+        _=>System.Text.RegularExpressions.Regex.Replace(char.ToUpperInvariant(key[0])+key[1..],"([a-z])([A-Z])","$1 $2")};
+    static string Display(string key,JsonElement value)
+    {
+        if(key.StartsWith("fecha",StringComparison.OrdinalIgnoreCase)&&value.ValueKind==JsonValueKind.String&&value.TryGetDateTime(out var date))return value.GetString()?.Length==10 ? date.ToString("d") : UiDates.Local(date).ToString("g");
+        return value.ToString();
+    }
+}

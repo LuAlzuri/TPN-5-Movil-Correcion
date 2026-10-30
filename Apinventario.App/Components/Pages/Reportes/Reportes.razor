@@ -1,0 +1,34 @@
+@page "/admin/reportes"
+@attribute [Authorize(Roles = "Administrador")]
+@inject ReportsClient Client
+@inject FileService Files
+@inject ConfirmService Confirm
+@inject AppErrorLogger Logger
+<h1>Reportes PDF</h1><p class="muted">Consultá el stock o los movimientos confirmados. Los reportes se generan en el servidor.</p>
+<EditForm Model="form" OnValidSubmit="Download"><DataAnnotationsValidator /><ValidationSummary />
+<fieldset class="panel" disabled="@busy"><label for="report-type">Reporte</label><InputSelect id="report-type" class="form-select" @bind-Value="form.Tipo" @bind-Value:after="ClearFile"><option value="stock">Stock actual</option><option value="ingresos">Entradas confirmadas</option><option value="salidas">Salidas aceptadas</option></InputSelect>
+@if(form.Tipo!="stock"){<div class="form-grid"><div><label for="report-from">Desde</label><InputDate id="report-from" class="form-control" @bind-Value="form.Desde" @bind-Value:after="ClearFile" /></div><div><label for="report-to">Hasta inclusive</label><InputDate id="report-to" class="form-control" @bind-Value="form.Hasta" @bind-Value:after="ClearFile" /></div></div><p class="muted">Días del negocio en UTC−03. Sin fechas se incluye todo el período disponible.</p>}
+<button type="submit" class="btn btn-primary mt-3">Generar y consultar PDF</button></fieldset></EditForm>
+<Feedback Busy="busy" Error="@error" Message="@message" />
+@if(file is not null){<section class="panel"><h2>Documento generado</h2><p>@file.FileName · @((file.Bytes.Length/1024.0).ToString("N1")) KB</p><div class="actions"><button class="btn btn-outline-secondary" disabled="@busy" @onclick="Open">Abrir PDF</button><button class="btn btn-outline-secondary" disabled="@busy" @onclick="Share">Compartir PDF</button></div></section>}
+<section class="panel"><h2>Enviar por correo</h2><p>Se generará un adjunto con el tipo y período seleccionados. Compartir por Android es una alternativa distinta del envío por la API.</p>
+<label for="report-email">Destinatario</label><input id="report-email" class="form-control" type="email" maxlength="150" @bind="form.Destinatario" disabled="@busy" />
+<button class="btn btn-outline-secondary mt-3" disabled="@busy" @onclick="Send">Revisar y enviar correo</button></section>
+<p class="muted">Límites del servidor: 1000 filas/cabeceras y 2000 detalles. Si el reporte excede el límite, reducí el rango de fechas. Un PDF vacío puede ser válido.</p>
+@code {
+    ReportForm form=new();DownloadedFile? file;bool busy;string? error,message;
+    void ClearFile(){file=null;message=null;error=null;}
+    async Task Run(Func<Task> work){if(busy)return;busy=true;error=null;message=null;try{await work();}catch(ApiFailure ex){error=ex.Message;}catch{await Logger.WriteAsync("File");error="No se pudo completar la operación. Revisá el resultado antes de repetir.";}finally{busy=false;}}
+    Task Download()=>Run(async()=>{file=null;file=await Client.DownloadAsync(form);if(!await Files.OpenPdfAsync(file))message="PDF descargado. No hay un visor disponible; podés compartirlo.";});
+    Task Open()=>Run(async()=>{if(file is not null&&!await Files.OpenPdfAsync(file))message="No hay un visor PDF disponible. Usá Compartir.";});
+    Task Share()=>Run(async()=>{if(file is not null)await Files.SharePdfAsync(file);});
+    async Task Send()
+    {
+        if(busy)return;
+        var errors=new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        if(!System.ComponentModel.DataAnnotations.Validator.TryValidateObject(form,new(form),errors,true)||string.IsNullOrWhiteSpace(form.Destinatario)){error="Revisá el destinatario y el rango de fechas. "+string.Join(" ",errors.Select(x=>x.ErrorMessage));return;}
+        var period=form.Tipo=="stock"?"Stock actual":$"{form.Desde?.ToString("d")??"Inicio"} a {form.Hasta?.ToString("d")??"Hoy"}";
+        if(!await Confirm.ConfirmAsync("Enviar reporte",$"Enviar PDF de {form.Tipo} ({period}) a {form.Destinatario}. Se enviará un correo real.","Enviar correo"))return;
+        await Run(async()=>{var result=await Client.SendAsync(form);if(!result.Enviado)throw new ApiFailure(200,"El servidor no confirmó el envío.");message=result.Mensaje;});
+    }
+}

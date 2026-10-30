@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/Apinventario.App.Unit/Apinventario.App.Unit.csproj" />
+  </Folder>
+  <Project Path="Apinventario.App/Apinventario.App.csproj" />
+  <Project Path="TPN°5-Movil/TPN°5-Movil.csproj" />
+</Solution>
