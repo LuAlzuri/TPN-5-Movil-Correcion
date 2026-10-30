@@ -1,0 +1,94 @@
+@page "/inventario/solicitudes"
+@attribute [Authorize(Roles = "Administrador,Empleado")]
+@inject CarritoClient Sales
+@inject ClientesClient Clients
+@inject SessionService Session
+
+<h1>Solicitudes de clientes</h1>
+<p class="muted">Pedidos enviados por los clientes. Al aceptarlos se descuenta el stock.</p>
+<Feedback Busy="busy" Error="@error" />
+@if (error is not null && data is null)
+{
+    <button class="btn btn-outline-secondary" disabled="@busy" @onclick="() => Load(page)">Reintentar</button>
+}
+
+@if (data is not null)
+{
+    @if (data.Items.Count == 0)
+    {
+        <p class="panel">No hay solicitudes registradas.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Estado</th><th>Productos</th><th>Total</th><th>Acciones</th></tr></thead>
+                <tbody>
+                    @foreach (var sale in data.Items)
+                    {
+                        <tr>
+                            <td>#@sale.Id</td>
+                            <td>@Fecha(sale.Fecha)</td>
+                            <td>@ClientName(sale.ClienteId)</td>
+                            <td><span class="badge-state @StatusClass(sale)">@PedidoEstado.De(sale)</span></td>
+                            <td>@sale.Detalles.Count</td>
+                            <td>@sale.Total.ToString("C")</td>
+                            <td><a class="btn btn-outline-secondary" href="@($"/inventario/solicitudes/{sale.Id}")">Ver</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <Pager Page="page" Pages="data.TotalPages" Total="data.TotalCount" Busy="busy" Change="Load" />
+    }
+}
+
+@code {
+    PageResult<SalidaDto>? data;
+    List<ClienteDto> clients = [];
+    string? error;
+    bool busy;
+    int page = 1;
+
+    bool IsAdmin => Session.CurrentUser?.Rol == "Administrador";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (IsAdmin)
+        {
+            try { clients = await Clients.CatalogoAsync(); }
+            catch (ApiFailure) { }
+        }
+        await Load(1);
+    }
+
+    async Task Load(int number)
+    {
+        if (busy) return;
+        busy = true;
+        error = null;
+        try
+        {
+            data = await Sales.ListarAsync(number, 10);
+            page = number;
+        }
+        catch (ApiFailure ex) { error = ex.Message; data = null; }
+        catch { error = "No se pudieron cargar las solicitudes."; data = null; }
+        finally { busy = false; }
+    }
+
+    string ClientName(int id)
+    {
+        var client = clients.FirstOrDefault(x => x.Id == id);
+        return client is null ? $"Cliente #{id}" : $"{client.Nombre} {client.Apellido}";
+    }
+
+    static string StatusClass(SalidaDto sale) => sale.Eliminado ? "status-cancelled"
+        : sale.ConfirmarXEmpleado ? "status-accepted"
+        : sale.ConfirmarXCliente ? "status-sent"
+        : "status-draft";
+
+    static string Fecha(DateTime value) => value.Kind == DateTimeKind.Utc
+        ? value.ToLocalTime().ToString("g")
+        : value.ToString("g");
+}

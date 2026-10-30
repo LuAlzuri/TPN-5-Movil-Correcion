@@ -8,7 +8,9 @@
     <!-- Test the actual portable source, with no Android workload/device dependency. -->
     <Compile Include="../../Apinventario.App/Models/Common/*.cs" Link="Source/Common/%(Filename)%(Extension)" />
     <Compile Include="../../Apinventario.App/Models/Administracion/*.cs" Link="Source/Admin/%(Filename)%(Extension)" />
+    <Compile Include="../../Apinventario.App/Models/Comercio/*.cs" Link="Source/Comercio/%(Filename)%(Extension)" />
     <Compile Include="../../Apinventario.App/Services/Infrastructure/*.cs" Exclude="../../Apinventario.App/Services/Infrastructure/TokenStore.cs;../../Apinventario.App/Services/Infrastructure/PlatformServices.cs" Link="Source/Infrastructure/%(Filename)%(Extension)" />
     <Compile Include="../../Apinventario.App/Services/Administracion/*.cs" Link="Source/Services/%(Filename)%(Extension)" />
+    <Compile Include="../../Apinventario.App/Services/Comercio/*.cs" Link="Source/Services/Comercio/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

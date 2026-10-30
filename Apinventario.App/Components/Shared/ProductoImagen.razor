@@ -1,0 +1,11 @@
+<div class="product-image">
+    <span class="image-placeholder" aria-hidden="true">Sin imagen</span>
+    @if (!string.IsNullOrWhiteSpace(Url))
+    {
+        <img src="@Url" alt="@Alt" loading="lazy" onerror="this.hidden=true" />
+    }
+</div>
+@code {
+    [Parameter] public string? Url { get; set; }
+    [Parameter] public string Alt { get; set; } = "Imagen del producto";
+}

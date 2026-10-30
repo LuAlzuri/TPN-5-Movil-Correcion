@@ -1,0 +1,123 @@
+@page "/inventario/productos"
+@attribute [Authorize(Roles = "Administrador,Empleado")]
+@inject CatalogoClient Client
+@inject ConfirmService Confirm
+
+<h1>Productos</h1>
+<p class="muted">Precio y stock del catálogo. El stock se modifica con ingresos y salidas confirmadas.</p>
+<form class="filters" @onsubmit="Search" @onsubmit:preventDefault>
+    <div>
+        <label for="inventory-search">Buscar por nombre o descripción</label>
+        <input id="inventory-search" class="form-control" @bind="search" />
+    </div>
+    <div>
+        <label for="inventory-category">Categoría</label>
+        <select id="inventory-category" class="form-select" @bind="categoriaId" @bind:after="Filtrar">
+            <option value="">Todas</option>
+            @foreach (var category in categories)
+            {
+                <option value="@category.Id">@category.Nombre</option>
+            }
+        </select>
+    </div>
+    <button type="submit" class="btn btn-outline-secondary" disabled="@busy">Buscar</button>
+    <a class="btn btn-primary" href="/inventario/productos/nuevo">Nuevo producto</a>
+</form>
+<Feedback Busy="busy" Error="@(error ?? categoryError)" Message="@message" />
+@if (error is not null && data is null)
+{
+    <button class="btn btn-outline-secondary" disabled="@busy" @onclick="() => Load(page)">Reintentar</button>
+}
+
+@if (data is not null)
+{
+    @if (data.Items.Count == 0)
+    {
+        <p class="panel">No hay productos para esta búsqueda.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Producto</th><th>Precio</th><th>Stock</th><th>Acciones</th></tr></thead>
+                <tbody>
+                    @foreach (var product in data.Items)
+                    {
+                        <tr>
+                            <td>@product.Nombre<br /><small class="muted">@product.CategoriaNombre</small></td>
+                            <td>@product.Precio.ToString("C")</td>
+                            <td>@product.Stock</td>
+                            <td>
+                                <div class="actions">
+                                    <a class="btn btn-outline-secondary" href="@($"/inventario/productos/{product.Id}")">Ver / editar</a>
+                                    <button type="button" class="btn btn-outline-danger" disabled="@busy" @onclick="() => Delete(product)">Dar de baja</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <Pager Page="page" Pages="data.TotalPages" Total="data.TotalCount" Busy="busy" Change="Load" />
+    }
+}
+
+@code {
+    PageResult<ProductoDto>? data;
+    List<CategoriaCatalogoDto> categories = [];
+    string search = "";
+    int? categoriaId;
+    string? error;
+    string? categoryError;
+    string? message;
+    bool busy;
+    int page = 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { categories = await Client.CategoriasAsync(); }
+        catch (ApiFailure ex) { categoryError = ex.Message; }
+        catch { categoryError = "No se pudieron cargar las categorías."; }
+        await Load(1);
+    }
+
+    Task Search() => Load(1);
+
+    Task Filtrar() => Load(1);
+
+    async Task Load(int number)
+    {
+        if (busy) return;
+        busy = true;
+        error = null;
+        try
+        {
+            data = await Client.ProductosAsync(number, 10,
+                string.IsNullOrWhiteSpace(search) ? null : search.Trim(), categoriaId);
+            page = number;
+        }
+        catch (ApiFailure ex) { error = ex.Message; data = null; }
+        catch { error = "No se pudieron cargar los productos."; data = null; }
+        finally { busy = false; }
+    }
+
+    async Task Delete(ProductoDto product)
+    {
+        if (busy || !await Confirm.ConfirmAsync("Dar de baja",
+            $"El producto {product.Nombre} dejará de estar disponible para la venta. El historial se conservará.", "Dar de baja")) return;
+
+        var target = data is not null && data.Items.Count == 1 && page > 1 ? page - 1 : page;
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await Client.EliminarAsync(product.Id);
+            message = "Producto dado de baja.";
+        }
+        catch (ApiFailure ex) { error = ex.Message; }
+        catch { error = "No se pudo dar de baja el producto."; }
+        finally { busy = false; }
+        if (error is null) await Load(target);
+    }
+}

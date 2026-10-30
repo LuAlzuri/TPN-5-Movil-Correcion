@@ -5,6 +5,7 @@ public class Salida
     public int Id { get; set; }
     public DateTime Fecha { get; set; } = DateTime.UtcNow;
     public string? Observaciones { get; set; }
+    public string? MedioPago { get; set; }
     public int ClienteId { get; set; }
     public int? UsuarioConfirmacionId { get; set; }
     public bool ConfirmarXCliente { get; set; }

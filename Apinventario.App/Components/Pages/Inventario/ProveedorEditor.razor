@@ -1,0 +1,117 @@
+@page "/inventario/proveedores/nuevo"
+@page "/inventario/proveedores/{Id:int}"
+@attribute [Authorize(Roles = "Administrador,Empleado")]
+@inject ProveedoresClient Client
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<a href="/inventario/proveedores">Volver a proveedores</a>
+<h1>@(Id.HasValue ? "Editar proveedor" : "Nuevo proveedor")</h1>
+<Feedback Busy="busy" Error="@error" Message="@message" />
+
+<EditForm Model="form" OnValidSubmit="Save">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+    <fieldset class="panel" disabled="@busy">
+        <div class="form-grid">
+            <div>
+                <label for="p-name">Nombre</label>
+                <InputText id="p-name" class="form-control" @bind-Value="form.Nombre" />
+            </div>
+            <div>
+                <label for="p-cuit">CUIT / CUIL</label>
+                <InputText id="p-cuit" class="form-control" @bind-Value="form.CUIT" />
+            </div>
+            <div>
+                <label for="p-email">Email</label>
+                <InputText id="p-email" type="email" class="form-control" @bind-Value="form.Email" />
+            </div>
+            <div>
+                <label for="p-phone">Teléfono</label>
+                <InputText id="p-phone" class="form-control" @bind-Value="form.Telefono" />
+            </div>
+            <div>
+                <label for="p-address">Dirección</label>
+                <InputText id="p-address" class="form-control" @bind-Value="form.Direccion" />
+            </div>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-primary" disabled="@busy">Guardar</button>
+            <a class="btn btn-outline-secondary" href="/inventario/proveedores">Cancelar</a>
+        </div>
+    </fieldset>
+</EditForm>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    [SupplyParameterFromQuery(Name = "creado")] public bool Creado { get; set; }
+    ProveedorForm form = new();
+    string? error;
+    string? message;
+    bool busy;
+    CancellationTokenSource lifetime = new();
+    int? loadedId;
+    bool loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loaded && loadedId == Id) return;
+        loaded = true;
+        loadedId = Id;
+        message = Creado ? "Proveedor creado." : null;
+        error = null;
+        if (!Id.HasValue)
+        {
+            form = new();
+            return;
+        }
+
+        busy = true;
+        try
+        {
+            var provider = await Client.ProveedorAsync(Id.Value, lifetime.Token);
+            form = new()
+            {
+                Nombre = provider.Nombre,
+                CUIT = provider.CUIT,
+                Email = provider.Email,
+                Telefono = provider.Telefono,
+                Direccion = provider.Direccion
+            };
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = ex.Message; }
+        catch { error = "No se pudo cargar el proveedor."; }
+        finally { busy = false; }
+    }
+
+    async Task Save()
+    {
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            if (Id is int id)
+            {
+                await Client.ActualizarAsync(id, form, lifetime.Token);
+                message = "Proveedor actualizado.";
+            }
+            else
+            {
+                var created = await Client.CrearAsync(form, lifetime.Token);
+                Navigation.NavigateTo($"/inventario/proveedores/{created.Id}?creado=true");
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = ex.Message; }
+        catch { error = "No se pudo guardar el proveedor."; }
+        finally { busy = false; }
+    }
+
+    public void Dispose()
+    {
+        lifetime.Cancel();
+        lifetime.Dispose();
+    }
+}

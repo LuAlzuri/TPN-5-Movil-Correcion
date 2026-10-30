@@ -1,0 +1,465 @@
+@page "/inventario/ingresos/nuevo"
+@page "/inventario/ingresos/{Id:int}"
+@attribute [Authorize(Roles = "Administrador,Empleado")]
+@inject IngresosClient Client
+@inject ProveedoresClient Providers
+@inject CatalogoClient Catalogo
+@inject SessionService Session
+@inject ConfirmService Confirm
+@inject NavigationManager Navigation
+@inject AppErrorLogger Logger
+@implements IDisposable
+
+<a href="/inventario/ingresos">Volver a ingresos</a>
+<h1>@(income is null ? "Nuevo ingreso" : $"Ingreso #{income.Id}")</h1>
+<Feedback Busy="busy" Error="@error" Message="@message" />
+
+@if (!IsEmployee && income is null)
+{
+    <p class="panel">Tu rol puede consultar los ingresos, pero solo un empleado puede crearlos, modificarlos o confirmarlos.</p>
+}
+else if (income is null)
+{
+    @if (providers.Count == 0)
+    {
+        <p class="panel">Primero necesitás cargar un proveedor. <a href="/inventario/proveedores/nuevo">Nuevo proveedor</a></p>
+    }
+    else
+    {
+        <EditForm Model="header" OnValidSubmit="Create">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <fieldset class="panel" disabled="@busy">
+                <h2>Datos del ingreso</h2>
+                <div class="form-grid">
+                    <div>
+                        <label for="income-new-provider">Proveedor</label>
+                        <InputSelect id="income-new-provider" class="form-select" @bind-Value="header.ProveedorId">
+                            <option value="">Seleccioná un proveedor</option>
+                            @foreach (var provider in providers)
+                            {
+                                <option value="@provider.Id">@provider.Nombre</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div>
+                        <label for="income-new-notes">Observaciones</label>
+                        <InputTextArea id="income-new-notes" class="form-control" rows="2" @bind-Value="header.Observaciones" />
+                    </div>
+                </div>
+                <p class="muted">Después de crearlo vas a poder agregar los productos y confirmar el ingreso.</p>
+                <div class="actions">
+                    <button type="submit" class="btn btn-primary" disabled="@busy">Crear ingreso</button>
+                    <a class="btn btn-outline-secondary" href="/inventario/ingresos">Cancelar</a>
+                </div>
+            </fieldset>
+        </EditForm>
+    }
+}
+else
+{
+    <section class="panel">
+        <div class="order-head">
+            <span class="badge-state @(income.Confirmado ? "income-confirmed" : "income-draft")">
+                @(income.Confirmado ? "Confirmado" : "Borrador")
+            </span>
+            <span class="muted">@Fecha(income.Fecha)</span>
+        </div>
+        <dl class="detail-grid">
+            <dt>Proveedor</dt>
+            <dd>@ProviderName(income.ProveedorId)</dd>
+            <dt>Empleado</dt>
+            <dd>#@income.EmpleadoId</dd>
+            <dt>Confirmación</dt>
+            <dd>@FechaOpcional(income.FechaConfirmacion)</dd>
+            <dt>Total</dt>
+            <dd>@income.Total.ToString("C")</dd>
+        </dl>
+        @if (!string.IsNullOrWhiteSpace(income.Observaciones))
+        {
+            <p><strong>Observaciones:</strong> @income.Observaciones</p>
+        }
+        @if (income.Confirmado)
+        {
+            <p>Ingreso confirmado. El stock fue incrementado y los detalles están bloqueados.</p>
+        }
+
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Descuento</th><th>Subtotal</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var line in income.Detalles)
+                    {
+                        <tr>
+                            <td>@ProductName(line.ProductoId)</td>
+                            <td>@line.Cantidad</td>
+                            <td>@line.PrecioUnitario.ToString("C")</td>
+                            <td>@line.DescAplicado.ToString("0.##")%</td>
+                            <td>@line.Subtotal.ToString("C")</td>
+                            <td>
+                                @if (IsEditable)
+                                {
+                                    <div class="actions">
+                                        <button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="() => BeginEdit(line)">Editar</button>
+                                        <button type="button" class="btn btn-outline-danger" disabled="@busy" @onclick="() => RemoveLine(line)">Quitar</button>
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (income.Detalles.Count == 0)
+        {
+            <p class="muted">Todavía no agregaste productos.</p>
+        }
+    </section>
+
+    @if (IsEditable)
+    {
+        @if (editingLine is not null)
+        {
+            <section class="panel">
+                <h2>Editar línea</h2>
+                <p>@ProductName(editingLine.ProductoId)</p>
+                <div class="form-grid">
+                    <div>
+                        <label for="line-quantity">Cantidad</label>
+                        <input id="line-quantity" class="form-control" type="number" min="1" @bind="editCantidad" />
+                    </div>
+                    <div>
+                        <label for="line-discount">Descuento (%)</label>
+                        <input id="line-discount" class="form-control" type="number" min="0" max="100" step="0.01" @bind="editDescuento" />
+                    </div>
+                </div>
+                <div class="actions">
+                    <button type="button" class="btn btn-primary" disabled="@busy" @onclick="SaveLine">Guardar línea</button>
+                    <button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="CancelEdit">Cancelar</button>
+                </div>
+            </section>
+        }
+
+        <section class="panel">
+            <h2>Agregar producto</h2>
+            <form class="filters" @onsubmit="SearchProducts" @onsubmit:preventDefault>
+                <div>
+                    <label for="income-product-search">Buscar producto</label>
+                    <input id="income-product-search" class="form-control" @bind="productSearch" />
+                </div>
+                <button type="submit" class="btn btn-outline-secondary" disabled="@(busy || productBusy)">Buscar</button>
+            </form>
+            @if (foundProducts.Count == 0)
+            {
+                <p class="muted">No se encontraron productos para esa búsqueda.</p>
+            }
+            else
+            {
+                <div class="form-grid">
+                    <div>
+                        <label for="income-product">Producto</label>
+                        <select id="income-product" class="form-select" @bind="selectedProductId">
+                            @foreach (var product in foundProducts)
+                            {
+                                <option value="@product.Id">@product.Nombre (stock @product.Stock)</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label for="income-quantity">Cantidad</label>
+                        <input id="income-quantity" class="form-control" type="number" min="1" @bind="newQuantity" />
+                    </div>
+                    <div>
+                        <label for="income-discount">Descuento (%)</label>
+                        <input id="income-discount" class="form-control" type="number" min="0" max="100" step="0.01" @bind="newDiscount" />
+                    </div>
+                </div>
+                <p class="muted">El precio unitario se toma del producto al agregar la línea.</p>
+                <button type="button" class="btn btn-primary" disabled="@(busy || productBusy || selectedProductId is null)" @onclick="AddLine">
+                    Agregar línea
+                </button>
+            }
+        </section>
+    }
+
+    @if (IsEmployee)
+    {
+        <div class="actions">
+            @if (!income.Confirmado)
+            {
+                <button type="button" class="btn btn-primary" disabled="@(busy || income.Detalles.Count == 0)" @onclick="ConfirmIncome">
+                    Confirmar ingreso
+                </button>
+            }
+            <button type="button" class="btn btn-outline-danger" disabled="@busy" @onclick="DeleteIncome">
+                @(income.Confirmado ? "Revertir ingreso" : "Eliminar ingreso")
+            </button>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    [SupplyParameterFromQuery(Name = "creado")] public bool Creado { get; set; }
+    IngresoDto? income;
+    IngresoForm header = new();
+    List<ProveedorDto> providers = [];
+    readonly Dictionary<int, ProductoDto> products = [];
+    List<ProductoDto> foundProducts = [];
+    DetalleIngresoDto? editingLine;
+    int? selectedProductId;
+    int newQuantity = 1;
+    decimal newDiscount;
+    int editCantidad = 1;
+    decimal editDescuento;
+    string productSearch = "";
+    string? error;
+    string? message;
+    bool busy;
+    bool productBusy;
+    CancellationTokenSource lifetime = new();
+    int? loadedId;
+    bool loaded;
+
+    bool IsEmployee => Session.CurrentUser?.Rol == "Empleado";
+    bool IsEditable => IsEmployee && income is not null && !income.Confirmado;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loaded && loadedId == Id) return;
+        loaded = true;
+        loadedId = Id;
+        message = Creado ? "Ingreso creado. Agregá los productos y confirmalo cuando esté completo." : null;
+        busy = true;
+        error = null;
+        income = null;
+        products.Clear();
+        foundProducts = [];
+        editingLine = null;
+        selectedProductId = null;
+        try
+        {
+            try { providers = await Providers.CatalogoAsync(lifetime.Token); }
+            catch (ApiFailure ex) { error = ex.Message; }
+
+            if (Id is int id)
+            {
+                income = await Client.IngresoAsync(id, lifetime.Token);
+                await LoadProducts(income);
+                if (IsEmployee) await SearchProducts();
+            }
+            else
+            {
+                newQuantity = 1;
+                newDiscount = 0;
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = ex.Message; }
+        catch { error = "No se pudo cargar el ingreso."; }
+        finally { busy = false; }
+    }
+
+    async Task LoadProducts(IngresoDto ingreso)
+    {
+        foreach (var productId in ingreso.Detalles.Select(x => x.ProductoId).Distinct())
+        {
+            if (products.ContainsKey(productId)) continue;
+            try { products[productId] = await Catalogo.ProductoAsync(productId, lifetime.Token); }
+            catch (ApiFailure) { }
+        }
+    }
+
+    async Task Reload()
+    {
+        var loaded = await Client.IngresoAsync(Id!.Value, lifetime.Token);
+        await LoadProducts(loaded);
+        income = loaded;
+        editingLine = null;
+    }
+
+    async Task Create()
+    {
+        busy = true;
+        error = null;
+        try
+        {
+            var created = await Client.CrearAsync(header, lifetime.Token);
+            Navigation.NavigateTo($"/inventario/ingresos/{created.Id}?creado=true");
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = ex.Message; }
+        catch { error = "No se pudo crear el ingreso."; }
+        finally { busy = false; }
+    }
+
+    async Task SearchProducts()
+    {
+        productBusy = true;
+        error = null;
+        try
+        {
+            var result = await Catalogo.ProductosAsync(1, 20,
+                string.IsNullOrWhiteSpace(productSearch) ? null : productSearch.Trim());
+            foundProducts = result.Items;
+            selectedProductId = foundProducts.FirstOrDefault()?.Id;
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = ex.Message; }
+        catch { error = "No se pudieron buscar los productos."; }
+        finally { productBusy = false; }
+    }
+
+    async Task AddLine()
+    {
+        if (income is null || !IsEditable || selectedProductId is null) return;
+        if (newQuantity < 1) { error = "La cantidad debe ser mayor a cero."; return; }
+        if (newDiscount is < 0 or > 100) { error = "El descuento debe estar entre 0 y 100."; return; }
+
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await Client.AgregarDetalleAsync(income.Id, new()
+            {
+                ProductoId = selectedProductId,
+                Cantidad = newQuantity,
+                DescAplicado = newDiscount
+            }, lifetime.Token);
+            await Reload();
+            message = "Línea agregada.";
+            newQuantity = 1;
+            newDiscount = 0;
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = "No se pudo agregar la línea. " + ex.Message; }
+        catch { error = "No se pudo agregar la línea."; }
+        finally { busy = false; }
+    }
+
+    void BeginEdit(DetalleIngresoDto line)
+    {
+        editingLine = line;
+        editCantidad = line.Cantidad;
+        editDescuento = line.DescAplicado;
+        error = null;
+        message = null;
+    }
+
+    void CancelEdit()
+    {
+        editingLine = null;
+        error = null;
+    }
+
+    async Task SaveLine()
+    {
+        if (income is null || editingLine is null || !IsEditable) return;
+        if (editCantidad < 1) { error = "La cantidad debe ser mayor a cero."; return; }
+        if (editDescuento is < 0 or > 100) { error = "El descuento debe estar entre 0 y 100."; return; }
+
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await Client.EditarDetalleAsync(income.Id, editingLine.Id, new()
+            {
+                ProductoId = editingLine.ProductoId,
+                Cantidad = editCantidad,
+                DescAplicado = editDescuento
+            }, lifetime.Token);
+            await Reload();
+            message = "Línea actualizada.";
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = "No se pudo actualizar la línea. " + ex.Message; }
+        catch { error = "No se pudo actualizar la línea."; }
+        finally { busy = false; }
+    }
+
+    async Task RemoveLine(DetalleIngresoDto line)
+    {
+        if (income is null || !IsEditable) return;
+        if (!await Confirm.ConfirmAsync("Quitar línea",
+            $"Se quitará {ProductName(line.ProductoId)} del ingreso.", "Quitar")) return;
+
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await Client.QuitarDetalleAsync(income.Id, line.Id, lifetime.Token);
+            await Reload();
+            message = "Línea quitada.";
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = "No se pudo quitar la línea. " + ex.Message; }
+        catch { error = "No se pudo quitar la línea."; }
+        finally { busy = false; }
+    }
+
+    async Task ConfirmIncome()
+    {
+        if (income is null || !IsEditable) return;
+        if (!await Confirm.ConfirmAsync("Confirmar ingreso",
+            "El stock de los productos se incrementará y el ingreso quedará bloqueado.", "Confirmar")) return;
+
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await Client.ConfirmarAsync(income.Id, lifetime.Token);
+            await Reload();
+            message = "Ingreso confirmado. El stock fue actualizado.";
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = "No se pudo confirmar el ingreso. " + ex.Message; }
+        catch { error = "No se pudo confirmar el ingreso."; }
+        finally { busy = false; }
+    }
+
+    async Task DeleteIncome()
+    {
+        if (income is null || !IsEmployee) return;
+        var action = income.Confirmado ? "Revertir ingreso" : "Eliminar ingreso";
+        var detail = income.Confirmado
+            ? "Se descontará del stock la cantidad ingresada. Si no hay stock suficiente, la operación fallará."
+            : "El ingreso se eliminará definitivamente.";
+        if (!await Confirm.ConfirmAsync(action, detail, action)) return;
+
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await Client.EliminarAsync(income.Id, lifetime.Token);
+            Navigation.NavigateTo("/inventario/ingresos");
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = "No se pudo eliminar el ingreso. " + ex.Message; }
+        catch
+        {
+            error = "No se pudo eliminar el ingreso.";
+            await Logger.WriteAsync("Network");
+        }
+        finally { busy = false; }
+    }
+
+    string ProviderName(int id) => providers.FirstOrDefault(x => x.Id == id)?.Nombre ?? $"Proveedor #{id}";
+    string ProductName(int id) => products.GetValueOrDefault(id)?.Nombre ?? $"Producto #{id}";
+
+    static string Fecha(DateTime value) => value.Kind == DateTimeKind.Utc
+        ? value.ToLocalTime().ToString("g")
+        : value.ToString("g");
+
+    static string FechaOpcional(DateTime? value) => value.HasValue ? Fecha(value.Value) : "Pendiente";
+
+    public void Dispose()
+    {
+        lifetime.Cancel();
+        lifetime.Dispose();
+    }
+}

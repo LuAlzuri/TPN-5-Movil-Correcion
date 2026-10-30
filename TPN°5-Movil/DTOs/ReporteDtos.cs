@@ -5,6 +5,27 @@ namespace TPN_5_MOVIL.DTOs;
 public record ReporteStockFila(int Id, string Nombre, string Categoria, decimal Precio, int Stock);
 public record ReporteMovimientoFila(int Id, DateTime FechaConfirmacionUtc, string Contraparte, string Confirmador, decimal Total);
 
+public record ReporteDetalleComprobante(string Producto, int Cantidad, decimal PrecioUnitario, decimal DescAplicado, decimal Subtotal);
+public record ReporteComprobanteSalida(
+    int Id,
+    DateTime FechaUtc,
+    string ClienteNombre,
+    string ClienteApellido,
+    string ClienteCuit,
+    string? ClienteEmail,
+    string? ClienteTelefono,
+    string? ClienteDireccion,
+    string? Observaciones,
+    string? MedioPago,
+    bool ConfirmarXCliente,
+    bool ConfirmarXEmpleado,
+    DateTime? FechaConfirmacionClienteUtc,
+    DateTime? FechaConfirmacionEmpleadoUtc,
+    string? ConfirmadorNombre,
+    string? ConfirmadorApellido,
+    IReadOnlyCollection<ReporteDetalleComprobante> Detalles,
+    decimal Total);
+
 // Presentation uses an explicit fixed UTC-03:00 offset, independently of the host.
 public record ReporteContexto(DateTimeOffset GeneradoUtc, DateOnly? Desde = null, DateOnly? Hasta = null)
 {

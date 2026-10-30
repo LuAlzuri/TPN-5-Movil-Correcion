@@ -1,0 +1,171 @@
+@page "/compras/pago/{SalidaId:int}"
+@attribute [Authorize(Roles = "Cliente")]
+@inject CarritoClient Sales
+@inject CatalogoClient Catalogo
+@inject CarritoState CarritoState
+@inject NavigationManager Navigation
+@inject AppErrorLogger Logger
+@implements IDisposable
+
+<h1>Pago simulado</h1>
+<p class="muted">No se realizará un cobro real. Al confirmar, el pedido queda pendiente de aceptación y el stock se descuenta cuando el personal lo acepte.</p>
+<Feedback Busy="busy" Error="@error" />
+
+@if (sale is null)
+{
+    @if (!busy && error is not null)
+    {
+        <button class="btn btn-outline-secondary" @onclick="Load">Reintentar</button>
+    }
+}
+else if (!PedidoEstado.EsBorradorActivo(sale))
+{
+    <div class="panel">
+        <p>Este pedido ya fue enviado y no puede modificarse desde el pago.</p>
+        <a class="btn btn-primary" href="@($"/compras/pedidos/{sale.Id}")">Ver pedido</a>
+    </div>
+}
+else
+{
+    <section class="panel">
+        <h2>Resumen del borrador #@sale.Id</h2>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Subtotal</th></tr></thead>
+                <tbody>
+                    @foreach (var line in sale.Detalles)
+                    {
+                        var product = ProductoDe(line.ProductoId);
+                        <tr>
+                            <td>
+                                @NombreDe(line)
+                                @if (product is null)
+                                {
+                                    <br /><small class="muted">No se pudo cargar el detalle.</small>
+                                }
+                                else if (line.Cantidad > product.Stock)
+                                {
+                                    <br /><small class="warn">Stock actual: @product.Stock. La confirmación puede fallar.</small>
+                                }
+                            </td>
+                            <td>@line.Cantidad</td>
+                            <td>@line.PrecioUnitario.ToString("C")</td>
+                            <td>@line.Subtotal.ToString("C")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="total">Total <strong>@sale.Total.ToString("C")</strong></p>
+    </section>
+
+    <section class="panel">
+        <h2>Datos del pago</h2>
+        <label for="payment-method">Medio de pago</label>
+        <select id="payment-method" class="form-select" @bind="metodo">
+            <option value="Tarjeta">Tarjeta</option>
+            <option value="Transferencia">Transferencia</option>
+            <option value="Efectivo">Efectivo</option>
+        </select>
+        <label class="check">
+            <input type="checkbox" @bind="acepta" />
+            Confirmo que revisé los productos y acepto enviar el pedido.
+        </label>
+        <div class="actions">
+            <a class="btn btn-outline-secondary" href="/compras/carrito">Volver al carrito</a>
+            <button type="button" class="btn btn-primary" disabled="@(busy || !acepta)" @onclick="Confirmar">
+                Confirmar pedido
+            </button>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter] public int SalidaId { get; set; }
+    SalidaDto? sale;
+    readonly Dictionary<int, ProductoDto> products = [];
+    string metodo = "Tarjeta";
+    bool acepta;
+    string? error;
+    bool busy;
+    CancellationTokenSource lifetime = new();
+
+    protected override Task OnInitializedAsync() => Load();
+
+    async Task Load()
+    {
+        busy = true;
+        error = null;
+        try
+        {
+            var loaded = await Sales.SalidaAsync(SalidaId, lifetime.Token);
+            foreach (var productId in loaded.Detalles.Select(x => x.ProductoId).Distinct())
+            {
+                if (products.ContainsKey(productId)) continue;
+                try { products[productId] = await Catalogo.ProductoAsync(productId, lifetime.Token); }
+                catch (ApiFailure) { }
+            }
+            sale = loaded;
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = ex.Message; }
+        catch { error = "No se pudo cargar el pago."; }
+        finally { busy = false; }
+    }
+
+    async Task Confirmar()
+    {
+        if (sale is null || busy) return;
+        if (!acepta)
+        {
+            error = "Marcá la confirmación para enviar el pedido.";
+            return;
+        }
+
+        busy = true;
+        error = null;
+        try
+        {
+            await Sales.ConfirmarClienteAsync(sale.Id, metodo, lifetime.Token);
+            CarritoState.SalidaId = null;
+            Navigation.NavigateTo($"/compras/pedidos/{sale.Id}?enviado=true");
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex)
+        {
+            error = "No se pudo confirmar el pedido. " + ex.Message;
+            if (ex.StatusCode == 409) await ReloadAfterConflict();
+        }
+        catch
+        {
+            error = "No se pudo confirmar el pedido.";
+            await Logger.WriteAsync("Network");
+        }
+        finally { busy = false; }
+    }
+
+    async Task ReloadAfterConflict()
+    {
+        try
+        {
+            var current = await Sales.SalidaAsync(SalidaId, lifetime.Token);
+            foreach (var productId in current.Detalles.Select(x => x.ProductoId).Distinct())
+            {
+                try { products[productId] = await Catalogo.ProductoAsync(productId, lifetime.Token); }
+                catch (ApiFailure) { }
+            }
+            sale = current;
+        }
+        catch (ApiFailure) { }
+        catch (OperationCanceledException) { }
+    }
+
+    ProductoDto? ProductoDe(int id) => products.GetValueOrDefault(id);
+    string NombreDe(DetalleSalidaDto line) => ProductoDe(line.ProductoId)?.Nombre ?? $"Producto #{line.ProductoId}";
+
+    public void Dispose()
+    {
+        lifetime.Cancel();
+        lifetime.Dispose();
+    }
+}

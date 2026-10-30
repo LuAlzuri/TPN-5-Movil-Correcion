@@ -23,6 +23,6 @@ public sealed class FileService
         await File.WriteAllBytesAsync(path, file.Bytes);
         return path;
     }
-    public async Task<bool> OpenPdfAsync(DownloadedFile file) => await Launcher.Default.OpenAsync(new OpenFileRequest("Reporte", new ReadOnlyFile(await SaveAsync(file), "application/pdf")));
-    public async Task SharePdfAsync(DownloadedFile file) => await Share.Default.RequestAsync(new ShareFileRequest("Compartir reporte", new ShareFile(await SaveAsync(file), "application/pdf")));
+    public async Task<bool> OpenPdfAsync(DownloadedFile file, string title = "Reporte") => await Launcher.Default.OpenAsync(new OpenFileRequest(title, new ReadOnlyFile(await SaveAsync(file), "application/pdf")));
+    public async Task SharePdfAsync(DownloadedFile file, string title = "Compartir reporte") => await Share.Default.RequestAsync(new ShareFileRequest(title, new ShareFile(await SaveAsync(file), "application/pdf")));
 }

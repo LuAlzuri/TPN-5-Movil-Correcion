@@ -36,6 +36,42 @@ public sealed class SalidaService(AppDbContext db, IAuditoriaAccionesService aud
     public async Task<SalidaResponse> ConsultarAsync(int id, int? propietarioId, CancellationToken ct) =>
         Respuesta(await BuscarAsync(id, propietarioId, ct), await DetallesAsync(id, ct));
 
+    public async Task<ReporteComprobanteSalida> ObtenerComprobanteAsync(int id, int? propietarioId, CancellationToken ct)
+    {
+        var header = await db.Salidas.IgnoreQueryFilters().AsNoTracking()
+            .Where(s => s.Id == id && (!propietarioId.HasValue || s.ClienteId == propietarioId.Value))
+            .Select(s => new
+            {
+                s.Id, s.Fecha, s.Observaciones, s.MedioPago, s.ConfirmarXCliente, s.ConfirmarXEmpleado,
+                s.FechaConfirmacionCliente, s.FechaConfirmacionEmpleado, s.UsuarioConfirmacionId, s.Eliminado,
+                ClienteNombre = s.Cliente.Usuario.Nombre,
+                ClienteApellido = s.Cliente.Usuario.Apellido,
+                ClienteCuit = s.Cliente.Usuario.CUIT,
+                ClienteEmail = s.Cliente.Usuario.Email,
+                ClienteTelefono = s.Cliente.Telefono,
+                ClienteDireccion = s.Cliente.Direccion
+            }).SingleOrDefaultAsync(ct) ?? throw NoEncontrado("La salida no existe.");
+        if (header.Eliminado) throw Conflicto("No se puede generar un comprobante de un pedido cancelado.");
+        if (!header.ConfirmarXCliente) throw Conflicto("El comprobante estará disponible cuando el cliente confirme el pedido.");
+
+        var confirmador = header.UsuarioConfirmacionId is int usuarioId
+            ? await db.Usuarios.IgnoreQueryFilters().AsNoTracking()
+                .Where(u => u.Id == usuarioId).Select(u => new { u.Nombre, u.Apellido }).SingleOrDefaultAsync(ct)
+            : null;
+        // Ignore filters so a deleted product or account does not erase historical receipt data.
+        var rows = await db.DetallesSalida.IgnoreQueryFilters().AsNoTracking()
+            .Where(d => d.SalidaId == id).OrderBy(d => d.Id)
+            .Select(d => new { d.Producto.Nombre, d.Cantidad, d.PrecioUnitario, d.DescAplicado })
+            .ToListAsync(ct);
+        var details = rows.Select(d => new ReporteDetalleComprobante(d.Nombre, d.Cantidad, d.PrecioUnitario,
+            d.DescAplicado, ImportesMovimiento.Subtotal(d.Cantidad, d.PrecioUnitario, d.DescAplicado))).ToList();
+        return new(header.Id, header.Fecha, header.ClienteNombre, header.ClienteApellido, header.ClienteCuit,
+            header.ClienteEmail, header.ClienteTelefono, header.ClienteDireccion, header.Observaciones,
+            header.MedioPago, header.ConfirmarXCliente, header.ConfirmarXEmpleado,
+            header.FechaConfirmacionCliente, header.FechaConfirmacionEmpleado,
+            confirmador?.Nombre, confirmador?.Apellido, details, details.Sum(d => d.Subtotal));
+    }
+
     public async Task<DetalleSalidaResponse> ConsultarDetalleAsync(int id, int detalleId, int? propietarioId, CancellationToken ct)
     {
         await BuscarAsync(id, propietarioId, ct);
@@ -134,15 +170,17 @@ public sealed class SalidaService(AppDbContext db, IAuditoriaAccionesService aud
             return true;
         }, ct);
 
-    public Task<SalidaResponse> ConfirmarClienteAsync(int id, int clienteId, CancellationToken ct) =>
+    public Task<SalidaResponse> ConfirmarClienteAsync(int id, int clienteId, string? medioPago, CancellationToken ct) =>
         TransaccionAsync(clienteId, true, async () =>
         {
             ExigirBorrador(await BloquearAsync(id, clienteId, ct));
+            var normalizedPayment = NormalizarMedioPago(medioPago);
             await ValidarConfirmacionAsync(id, ct);
             var now = DateTime.UtcNow;
             ExigirCambio(await db.Salidas.Where(s => s.Id == id && !s.ConfirmarXCliente && !s.ConfirmarXEmpleado)
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.ConfirmarXCliente, true)
-                    .SetProperty(x => x.FechaConfirmacionCliente, now), ct));
+                    .SetProperty(x => x.FechaConfirmacionCliente, now)
+                    .SetProperty(x => x.MedioPago, normalizedPayment), ct));
             return await ConsultarAsync(id, clienteId, ct);
         }, ct);
 
@@ -256,6 +294,14 @@ public sealed class SalidaService(AppDbContext db, IAuditoriaAccionesService aud
     }
     private static ApiException Conflicto(string message) => new(message, StatusCodes.Status409Conflict);
     private static ApiException NoEncontrado(string message) => new(message, StatusCodes.Status404NotFound);
+    private static string? NormalizarMedioPago(string? medioPago)
+    {
+        if (string.IsNullOrWhiteSpace(medioPago)) return null;
+        var value = medioPago.Trim();
+        return new[] { "Tarjeta", "Transferencia", "Efectivo" }
+            .FirstOrDefault(x => x.Equals(value, StringComparison.OrdinalIgnoreCase))
+            ?? throw new ApiException("El medio de pago debe ser Tarjeta, Transferencia o Efectivo.");
+    }
     private static void ValidarImportes(IEnumerable<DetalleSalida> details) =>
         ImportesMovimiento.Validar(details.Select(d => (d.Cantidad, d.PrecioUnitario, d.DescAplicado)),
             "El total de la salida excede el rango decimal(18,2).");
@@ -268,6 +314,6 @@ public sealed class SalidaService(AppDbContext db, IAuditoriaAccionesService aud
         var rows = details.Select(Respuesta).ToList();
         return new(s.Id, s.ClienteId, s.UsuarioConfirmacionId, s.Fecha, s.Observaciones, s.ConfirmarXCliente,
             s.ConfirmarXEmpleado, s.FechaConfirmacionCliente, s.FechaConfirmacionEmpleado, rows, rows.Sum(d => d.Subtotal))
-            { Eliminado = s.Eliminado };
+            { Eliminado = s.Eliminado, MedioPago = s.MedioPago };
     }
 }

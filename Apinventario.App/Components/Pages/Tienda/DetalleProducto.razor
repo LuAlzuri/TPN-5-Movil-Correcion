@@ -1,0 +1,146 @@
+@page "/tienda/productos/{id:int}"
+@attribute [Authorize(Roles = "Cliente")]
+@inject CatalogoClient Client
+@inject CarritoClient Carrito
+@inject CarritoState CarritoState
+@inject ApiConfig Config
+@inject AppErrorLogger Logger
+@implements IDisposable
+
+<a href="/tienda">Volver al catálogo</a>
+
+@if (product is null)
+{
+    <Feedback Busy="busy" Error="@error" />
+    @if (!busy && error is not null)
+    {
+        <button class="btn btn-outline-secondary" @onclick="Load">Reintentar</button>
+    }
+}
+else
+{
+    <section class="product-detail">
+        <ProductoImagen Url="@Config.ResolveImageUrl(product.ImagenUrl)" Alt="@($"Imagen de {product.Nombre}")" />
+        <div class="product-info">
+            <h1>@product.Nombre</h1>
+            <p class="muted">@product.CategoriaNombre</p>
+            <p class="price">@product.Precio.ToString("C")</p>
+            <p>
+                @if (product.Stock == 0)
+                {
+                    <span class="badge-state">Sin stock</span>
+                }
+                else
+                {
+                    <span class="stock">@product.Stock disponibles</span>
+                }
+            </p>
+            @if (!string.IsNullOrWhiteSpace(product.Descripcion))
+            {
+                <p>@product.Descripcion</p>
+            }
+
+            <Feedback Busy="busy" Error="@error" Message="@message" />
+            @if (message is not null)
+            {
+                <p><a class="btn btn-outline-secondary" href="/compras/carrito">Ver carrito</a></p>
+            }
+
+            @if (product.Stock > 0)
+            {
+                <div class="add-row">
+                    <div>
+                        <label for="quantity">Cantidad</label>
+                        <input id="quantity" class="form-control" type="number" inputmode="numeric"
+                               min="1" max="@product.Stock" @bind="cantidad" />
+                    </div>
+                    <button class="btn btn-primary" disabled="@(busy || cantidad < 1 || cantidad > product.Stock)"
+                            @onclick="Agregar">
+                        Agregar al pedido
+                    </button>
+                </div>
+                <p class="muted">El stock se valida nuevamente al confirmar el pedido.</p>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    ProductoDto? product;
+    string? error;
+    string? message;
+    bool busy;
+    int cantidad = 1;
+    CancellationTokenSource lifetime = new();
+
+    protected override Task OnInitializedAsync() => Load();
+
+    async Task Load()
+    {
+        busy = true;
+        error = null;
+        try
+        {
+            product = await Client.ProductoAsync(Id, lifetime.Token);
+            cantidad = product.Stock > 0 ? 1 : 0;
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex)
+        {
+            error = ex.StatusCode == 404 ? "El producto ya no está disponible." : ex.Message;
+        }
+        catch { error = "No se pudo cargar el producto."; }
+        finally { busy = false; }
+    }
+
+    async Task Agregar()
+    {
+        if (product is null) return;
+        if (cantidad < 1 || cantidad > product.Stock)
+        {
+            error = $"Elegí una cantidad entre 1 y {product.Stock}.";
+            return;
+        }
+
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            var draft = await Carrito.AsegurarBorradorAsync(CarritoState.SalidaId, lifetime.Token);
+            CarritoState.SalidaId = draft.Id;
+            await Carrito.AgregarDetalleAsync(draft.Id, product.Id, cantidad, lifetime.Token);
+            message = $"Agregado al borrador #{draft.Id}. Podés seguir comprando o revisar el carrito.";
+            cantidad = 1;
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex)
+        {
+            error = "No se pudo agregar el producto. " + ex.Message;
+            if (ex.StatusCode == 409) await RecargarProducto();
+        }
+        catch
+        {
+            error = "No se pudo agregar el producto.";
+            await Logger.WriteAsync("Network");
+        }
+        finally { busy = false; }
+    }
+
+    async Task RecargarProducto()
+    {
+        try
+        {
+            product = await Client.ProductoAsync(Id, lifetime.Token);
+            cantidad = product.Stock > 0 ? Math.Min(Math.Max(1, cantidad), product.Stock) : 0;
+        }
+        catch { }
+    }
+
+    public void Dispose()
+    {
+        lifetime.Cancel();
+        lifetime.Dispose();
+    }
+}

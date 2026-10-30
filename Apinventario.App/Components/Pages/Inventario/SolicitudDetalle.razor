@@ -1,0 +1,191 @@
+@page "/inventario/solicitudes/{Id:int}"
+@attribute [Authorize(Roles = "Administrador,Empleado")]
+@inject CarritoClient Sales
+@inject CatalogoClient Catalogo
+@inject ClientesClient Clients
+@inject SessionService Session
+@inject ConfirmService Confirm
+@inject AppErrorLogger Logger
+@implements IDisposable
+
+<a href="/inventario/solicitudes">Volver a solicitudes</a>
+<h1>Solicitud #@Id</h1>
+<Feedback Busy="busy" Error="@error" Message="@message" />
+
+@if (sale is null)
+{
+    @if (!busy && error is not null)
+    {
+        <button class="btn btn-outline-secondary" @onclick="Load">Reintentar</button>
+    }
+}
+else
+{
+    <section class="panel">
+        <div class="order-head">
+            <span class="badge-state @StatusClass(sale)">@PedidoEstado.De(sale)</span>
+            <span class="muted">@Fecha(sale.Fecha)</span>
+        </div>
+        <dl class="detail-grid">
+            <dt>Cliente</dt>
+            <dd>@ClientName(sale.ClienteId)</dd>
+            <dt>Total</dt>
+            <dd>@sale.Total.ToString("C")</dd>
+            <dt>Confirmación del cliente</dt>
+            <dd>@FechaOpcional(sale.FechaConfirmacionCliente)</dd>
+            <dt>Confirmación operativa</dt>
+            <dd>@FechaOpcional(sale.FechaConfirmacionEmpleado)</dd>
+        </dl>
+
+        @if (sale.Eliminado)
+        {
+            <p class="warn">El cliente canceló este pedido.</p>
+        }
+        else if (sale.ConfirmarXEmpleado)
+        {
+            <p>Pedido aceptado. El stock fue descontado.</p>
+        }
+        else if (sale.ConfirmarXCliente)
+        {
+            <p>Pendiente de aceptación. Revisá el stock antes de confirmar.</p>
+        }
+        else
+        {
+            <p>El cliente todavía no envió este borrador.</p>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(sale.Observaciones))
+        {
+            <p><strong>Observaciones:</strong> @sale.Observaciones</p>
+        }
+
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Descuento</th><th>Subtotal</th></tr></thead>
+                <tbody>
+                    @foreach (var line in sale.Detalles)
+                    {
+                        <tr>
+                            <td>@ProductName(line.ProductoId)</td>
+                            <td>@line.Cantidad</td>
+                            <td>@line.PrecioUnitario.ToString("C")</td>
+                            <td>@line.DescAplicado.ToString("0.##")%</td>
+                            <td>@line.Subtotal.ToString("C")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <div class="actions">
+        <a class="btn btn-outline-secondary" href="/inventario/solicitudes">Volver</a>
+        @if (CanAccept)
+        {
+            <button type="button" class="btn btn-primary" disabled="@busy" @onclick="Accept">Aceptar pedido</button>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    SalidaDto? sale;
+    readonly Dictionary<int, ProductoDto> products = [];
+    List<ClienteDto> clients = [];
+    string? error;
+    string? message;
+    bool busy;
+    CancellationTokenSource lifetime = new();
+
+    bool IsAdmin => Session.CurrentUser?.Rol == "Administrador";
+    bool IsEmployee => Session.CurrentUser?.Rol == "Empleado";
+    bool CanAccept => IsEmployee && sale is not null && sale.ConfirmarXCliente &&
+        !sale.ConfirmarXEmpleado && !sale.Eliminado;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (IsAdmin)
+        {
+            try { clients = await Clients.CatalogoAsync(lifetime.Token); }
+            catch (ApiFailure) { }
+        }
+        await Load();
+    }
+
+    async Task Load()
+    {
+        busy = true;
+        error = null;
+        try { await Reload(); }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = ex.Message; sale = null; }
+        catch { error = "No se pudo cargar la solicitud."; sale = null; }
+        finally { busy = false; }
+    }
+
+    async Task Reload()
+    {
+        var loaded = await Sales.SalidaAsync(Id, lifetime.Token);
+        foreach (var productId in loaded.Detalles.Select(x => x.ProductoId).Distinct())
+        {
+            if (products.ContainsKey(productId)) continue;
+            try { products[productId] = await Catalogo.ProductoAsync(productId, lifetime.Token); }
+            catch (ApiFailure) { }
+        }
+        sale = loaded;
+    }
+
+    async Task Accept()
+    {
+        if (sale is null || !CanAccept || busy) return;
+        if (!await Confirm.ConfirmAsync("Aceptar pedido",
+            "Se descontará el stock de los productos. Esta acción no se puede deshacer desde el móvil.", "Aceptar")) return;
+
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await Sales.ConfirmarAsync(sale.Id, lifetime.Token);
+            await Reload();
+            message = "Pedido aceptado. El stock fue actualizado.";
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex)
+        {
+            error = "No se pudo aceptar el pedido. " + ex.Message;
+            try { await Reload(); } catch (ApiFailure) { }
+        }
+        catch
+        {
+            error = "No se pudo aceptar el pedido.";
+            await Logger.WriteAsync("Network");
+        }
+        finally { busy = false; }
+    }
+
+    string ClientName(int id)
+    {
+        var client = clients.FirstOrDefault(x => x.Id == id);
+        return client is null ? $"Cliente #{id}" : $"{client.Nombre} {client.Apellido}";
+    }
+
+    string ProductName(int id) => products.GetValueOrDefault(id)?.Nombre ?? $"Producto #{id}";
+
+    static string StatusClass(SalidaDto sale) => sale.Eliminado ? "status-cancelled"
+        : sale.ConfirmarXEmpleado ? "status-accepted"
+        : sale.ConfirmarXCliente ? "status-sent"
+        : "status-draft";
+
+    static string Fecha(DateTime value) => value.Kind == DateTimeKind.Utc
+        ? value.ToLocalTime().ToString("g")
+        : value.ToString("g");
+
+    static string FechaOpcional(DateTime? value) => value.HasValue ? Fecha(value.Value) : "Pendiente";
+
+    public void Dispose()
+    {
+        lifetime.Cancel();
+        lifetime.Dispose();
+    }
+}

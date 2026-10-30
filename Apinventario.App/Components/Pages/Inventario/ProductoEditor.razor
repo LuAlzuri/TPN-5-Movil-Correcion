@@ -1,0 +1,206 @@
+@page "/inventario/productos/nuevo"
+@page "/inventario/productos/{Id:int}"
+@attribute [Authorize(Roles = "Administrador,Empleado")]
+@inject CatalogoClient Client
+@inject FileService Files
+@inject ApiConfig Config
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<a href="/inventario/productos">Volver a productos</a>
+<h1>@(Id.HasValue ? "Editar producto" : "Nuevo producto")</h1>
+<Feedback Busy="busy" Error="@error" Message="@message" />
+
+<EditForm Model="form" OnValidSubmit="Save">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+    <fieldset class="panel" disabled="@busy">
+        <div class="form-grid">
+            <div>
+                <label for="prod-name">Nombre</label>
+                <InputText id="prod-name" class="form-control" @bind-Value="form.Nombre" />
+            </div>
+            <div>
+                <label for="prod-category">Categoría</label>
+                <InputSelect id="prod-category" class="form-select" @bind-Value="form.CategoriaId">
+                    <option value="">Seleccioná una categoría</option>
+                    @foreach (var category in categories)
+                    {
+                        <option value="@category.Id">@category.Nombre</option>
+                    }
+                </InputSelect>
+            </div>
+            <div>
+                <label for="prod-price">Precio</label>
+                <InputNumber id="prod-price" class="form-control" step="0.01" @bind-Value="form.Precio" />
+            </div>
+            <div>
+                <label for="prod-desc">Descripción</label>
+                <InputTextArea id="prod-desc" class="form-control" rows="3" @bind-Value="form.Descripcion" />
+            </div>
+        </div>
+        @if (product is not null)
+        {
+            <p class="muted">Stock actual: @product.Stock. Se modifica con ingresos y salidas confirmadas.</p>
+        }
+        else
+        {
+            <p class="muted">El producto se crea con stock 0. La imagen se puede subir después de guardarlo.</p>
+        }
+        <div class="actions">
+            <button type="submit" class="btn btn-primary" disabled="@busy">Guardar</button>
+            <a class="btn btn-outline-secondary" href="/inventario/productos">Cancelar</a>
+        </div>
+    </fieldset>
+</EditForm>
+
+@if (Id.HasValue)
+{
+    <section class="panel">
+        <h2>Imagen</h2>
+        @if (product is not null)
+        {
+            <div class="image-editor">
+                <ProductoImagen Url="@Config.ResolveImageUrl(product.ImagenUrl)" Alt="@($"Imagen de {product.Nombre}")" />
+                <div>
+                    <p class="muted">JPG, PNG o WebP de hasta 5 MiB. Una imagen nueva reemplaza la anterior.</p>
+                    @if (selectedImage is not null)
+                    {
+                        <p>Archivo seleccionado: @selectedImage.FileName</p>
+                    }
+                    <div class="actions">
+                        <button type="button" class="btn btn-outline-secondary" disabled="@(busy || imageBusy)" @onclick="PickImage">
+                            Seleccionar imagen
+                        </button>
+                        <button type="button" class="btn btn-primary" disabled="@(busy || imageBusy || selectedImage is null)" @onclick="UploadImage">
+                            Subir imagen
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+        else if (!busy)
+        {
+            <p class="muted">Guardá el producto para poder subir una imagen.</p>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    [SupplyParameterFromQuery(Name = "creado")] public bool Creado { get; set; }
+    ProductoForm form = new();
+    ProductoDto? product;
+    List<CategoriaCatalogoDto> categories = [];
+    FileResult? selectedImage;
+    string? error;
+    string? message;
+    bool busy;
+    bool imageBusy;
+    CancellationTokenSource lifetime = new();
+    int? loadedId;
+    bool loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loaded && loadedId == Id) return;
+        loaded = true;
+        loadedId = Id;
+        message = Creado ? "Producto creado. Ya podés subir una imagen." : null;
+        busy = true;
+        error = null;
+        try
+        {
+            try { categories = await Client.CategoriasAsync(lifetime.Token); }
+            catch (ApiFailure ex) { error = ex.Message; }
+
+            if (Id is int id)
+            {
+                product = await Client.ProductoAsync(id, lifetime.Token);
+                form = new()
+                {
+                    Nombre = product.Nombre,
+                    Descripcion = product.Descripcion,
+                    Precio = product.Precio,
+                    CategoriaId = product.CategoriaId
+                };
+                if (!categories.Any(x => x.Id == product.CategoriaId))
+                    categories.Insert(0, new(product.CategoriaId, product.CategoriaNombre + " (inactiva)"));
+            }
+            else
+            {
+                product = null;
+                form = new();
+                selectedImage = null;
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = ex.Message; }
+        catch { error = "No se pudo cargar el producto."; }
+        finally { busy = false; }
+    }
+
+    async Task Save()
+    {
+        busy = true;
+        error = null;
+        message = null;
+        try
+        {
+            if (Id is int id)
+            {
+                await Client.ActualizarAsync(id, form, lifetime.Token);
+                message = "Producto actualizado.";
+            }
+            else
+            {
+                var created = await Client.CrearAsync(form, lifetime.Token);
+                Navigation.NavigateTo($"/inventario/productos/{created.Id}?creado=true");
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = ex.Message; }
+        catch { error = "No se pudo guardar el producto."; }
+        finally { busy = false; }
+    }
+
+    async Task PickImage()
+    {
+        error = null;
+        try { selectedImage = await Files.PickImageAsync(); }
+        catch { error = "No se pudo seleccionar la imagen."; }
+    }
+
+    async Task UploadImage()
+    {
+        if (Id is not int id || selectedImage is null || busy || imageBusy) return;
+
+        imageBusy = true;
+        error = null;
+        message = null;
+        try
+        {
+            await using var stream = await selectedImage.OpenReadAsync();
+            if (stream.CanSeek && stream.Length > 5 * 1024 * 1024)
+            {
+                error = "La imagen supera los 5 MiB.";
+                return;
+            }
+            await Client.SubirImagenAsync(id, selectedImage.FileName,
+                CatalogoClient.ContentTypeFor(selectedImage.FileName), stream, lifetime.Token);
+            product = await Client.ProductoAsync(id, lifetime.Token);
+            selectedImage = null;
+            message = "Imagen actualizada.";
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = "No se pudo subir la imagen. " + ex.Message; }
+        catch { error = "No se pudo subir la imagen."; }
+        finally { imageBusy = false; }
+    }
+
+    public void Dispose()
+    {
+        lifetime.Cancel();
+        lifetime.Dispose();
+    }
+}

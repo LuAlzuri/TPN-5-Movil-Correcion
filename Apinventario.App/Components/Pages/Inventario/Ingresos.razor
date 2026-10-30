@@ -1,0 +1,121 @@
+@page "/inventario/ingresos"
+@attribute [Authorize(Roles = "Administrador,Empleado")]
+@inject IngresosClient Client
+@inject ProveedoresClient Providers
+@inject SessionService Session
+
+<h1>Ingresos</h1>
+<p class="muted">Compras de mercadería. Confirmar un ingreso incrementa el stock.</p>
+<form class="filters" @onsubmit="Search" @onsubmit:preventDefault>
+    <div>
+        <label for="income-provider">Proveedor</label>
+        <select id="income-provider" class="form-select" @bind="proveedorId">
+            <option value="">Todos</option>
+            @foreach (var provider in providers)
+            {
+                <option value="@provider.Id">@provider.Nombre</option>
+            }
+        </select>
+    </div>
+    <div>
+        <label for="income-from">Desde</label>
+        <input id="income-from" class="form-control" type="date" @bind="desde" />
+    </div>
+    <div>
+        <label for="income-to">Hasta</label>
+        <input id="income-to" class="form-control" type="date" @bind="hasta" />
+    </div>
+    <button type="submit" class="btn btn-outline-secondary" disabled="@busy">Buscar</button>
+    @if (IsEmployee)
+    {
+        <a class="btn btn-primary" href="/inventario/ingresos/nuevo">Nuevo ingreso</a>
+    }
+</form>
+<Feedback Busy="busy" Error="@error" />
+@if (error is not null && data is null)
+{
+    <button class="btn btn-outline-secondary" disabled="@busy" @onclick="() => Load(page)">Reintentar</button>
+}
+
+@if (data is not null)
+{
+    @if (data.Items.Count == 0)
+    {
+        <p class="panel">No hay ingresos para los filtros seleccionados.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Fecha</th><th>Proveedor</th><th>Empleado</th><th>Estado</th><th>Total</th><th>Acciones</th></tr></thead>
+                <tbody>
+                    @foreach (var income in data.Items)
+                    {
+                        <tr>
+                            <td>@Fecha(income.Fecha)</td>
+                            <td>@ProviderName(income.ProveedorId)</td>
+                            <td>Empleado #@income.EmpleadoId</td>
+                            <td>
+                                <span class="badge-state @(income.Confirmado ? "income-confirmed" : "income-draft")">
+                                    @(income.Confirmado ? "Confirmado" : "Borrador")
+                                </span>
+                            </td>
+                            <td>@income.Total.ToString("C")</td>
+                            <td><a class="btn btn-outline-secondary" href="@($"/inventario/ingresos/{income.Id}")">Ver / editar</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <Pager Page="page" Pages="data.TotalPages" Total="data.TotalCount" Busy="busy" Change="Load" />
+    }
+}
+
+@code {
+    PageResult<IngresoDto>? data;
+    List<ProveedorDto> providers = [];
+    int? proveedorId;
+    DateTime? desde;
+    DateTime? hasta;
+    string? error;
+    bool busy;
+    int page = 1;
+
+    bool IsEmployee => Session.CurrentUser?.Rol == "Empleado";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { providers = await Providers.CatalogoAsync(); }
+        catch (ApiFailure) { }
+        await Load(1);
+    }
+
+    Task Search() => Load(1);
+
+    async Task Load(int number)
+    {
+        if (busy) return;
+        if (desde > hasta)
+        {
+            error = "La fecha desde no puede ser posterior a la fecha hasta.";
+            return;
+        }
+
+        busy = true;
+        error = null;
+        try
+        {
+            data = await Client.ListarAsync(number, 10, proveedorId: proveedorId, desde: desde, hasta: hasta);
+            page = number;
+        }
+        catch (ApiFailure ex) { error = ex.Message; data = null; }
+        catch { error = "No se pudieron cargar los ingresos."; data = null; }
+        finally { busy = false; }
+    }
+
+    string ProviderName(int id) => providers.FirstOrDefault(x => x.Id == id)?.Nombre ?? $"Proveedor #{id}";
+
+    static string Fecha(DateTime value) => value.Kind == DateTimeKind.Utc
+        ? value.ToLocalTime().ToString("g")
+        : value.ToString("g");
+}

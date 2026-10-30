@@ -1,0 +1,22 @@
+.total {
+    display: flex;
+    justify-content: space-between;
+    margin: 16px 0 0;
+    font-size: 1.2rem;
+}
+
+.warn {
+    color: #9a5b00;
+    font-weight: 600;
+}
+
+.check {
+    display: flex;
+    align-items: start;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.check input {
+    margin-top: 6px;
+}

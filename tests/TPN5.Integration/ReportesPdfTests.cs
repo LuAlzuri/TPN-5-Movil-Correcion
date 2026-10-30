@@ -19,6 +19,15 @@ public sealed class ReportesPdfTests
     }
     internal static string Texto(PdfDocument document) => string.Join("\n", document.GetPages().Select(page => ContentOrderTextExtractor.GetText(page)));
 
+    private static ReporteComprobanteSalida Comprobante(bool aceptado = false, string? medioPago = "Tarjeta")
+    {
+        var fecha = new DateTime(2026, 10, 27, 15, 45, 0, DateTimeKind.Utc);
+        return new(42, fecha, "Ana", "Pérez", "20-12345678-9", "ana@example.test", "11-5555-5555",
+            "Calle Falsa 123", "Entregar por la tarde", medioPago, true, aceptado, fecha.AddMinutes(5),
+            aceptado ? fecha.AddMinutes(10) : null, aceptado ? "Luis" : null, aceptado ? "Gómez" : null,
+            [new("Yerba mate", 2, 1000m, 10m, 1800m), new("Café molido", 1, 500m, 0m, 500m)], 2300m);
+    }
+
     [Theory]
     [InlineData("stock")]
     [InlineData("ingresos")]
@@ -117,6 +126,74 @@ public sealed class ReportesPdfTests
         {
             Directory.CreateDirectory(output);
             File.WriteAllBytes(Path.Combine(output, tipo + ".pdf"), bytes);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Comprobante_incluye_datos_pago_estado_y_leyenda_no_fiscal(bool aceptado)
+    {
+        var bytes = Servicio().GenerarComprobante(Comprobante(aceptado), Contexto);
+        using var document = PdfDocument.Open(bytes);
+        var text = Texto(document);
+        Assert.Contains("APINVENTARIO", text);
+        Assert.Contains("Comprobante de compra", text);
+        Assert.Contains("Pedido #000042", text);
+        Assert.Contains("DOCUMENTO NO FISCAL", text);
+        Assert.Contains("Documento no fiscal", text);
+        Assert.Contains("Ana", text);
+        Assert.Contains("Pérez", text);
+        Assert.Contains("20-12345678-9", text);
+        Assert.Contains("ana@example.test", text);
+        Assert.Contains("Tarjeta (simulado)", text);
+        Assert.Contains("Yerba mate", text);
+        Assert.Contains("Café molido", text);
+        Assert.Contains("2.300,00", text);
+        Assert.Contains("200,00", text);
+        Assert.Contains("Entregar por la tarde", text);
+        Assert.Contains("Página 1 de 1", text);
+        if (aceptado)
+        {
+            Assert.Contains("ACEPTADO", text);
+            Assert.Contains("Luis", text);
+        }
+        else
+        {
+            Assert.Contains("PENDIENTE DE ACEPTACIÓN", text);
+            Assert.Contains("stock se descuenta", text);
+        }
+    }
+
+    [Fact]
+    public void Comprobante_sin_medio_de_pago_es_valido()
+    {
+        var bytes = Servicio().GenerarComprobante(Comprobante(medioPago: null), Contexto);
+        using var document = PdfDocument.Open(bytes);
+        Assert.Contains("No informado", Texto(document));
+    }
+
+    [Fact]
+    public void Comprobante_multipagina_repite_encabezados_y_mantiene_todo_visible()
+    {
+        var details = Enumerable.Range(1, 120)
+            .Select(i => new ReporteDetalleComprobante($"Producto {i:D3} - " + new string('P', 100) + $"-Fin{i:D3}",
+                1, 100m, 0m, 100m)).ToArray();
+        var comprobante = Comprobante() with { Detalles = details, Total = details.Sum(d => d.Subtotal) };
+        var bytes = Servicio().GenerarComprobante(comprobante, Contexto);
+        using var document = PdfDocument.Open(bytes);
+        Assert.True(document.NumberOfPages > 1);
+        foreach (var page in document.GetPages())
+        {
+            var text = ContentOrderTextExtractor.GetText(page);
+            Assert.Contains("APINVENTARIO", text);
+            Assert.Contains("DOCUMENTO NO FISCAL", text);
+            Assert.Contains($"Página {page.Number} de {document.NumberOfPages}", text);
+            Assert.All(page.Letters, letter =>
+            {
+                Assert.InRange(letter.BoundingBox.Left, 0, (double)page.Width);
+                Assert.InRange(letter.BoundingBox.Bottom, 0, (double)page.Height);
+            });
         }
     }
 
