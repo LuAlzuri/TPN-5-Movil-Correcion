@@ -2,6 +2,8 @@
   <Folder Name="/tests/">
     <Project Path="tests/Apinventario.App.Unit/Apinventario.App.Unit.csproj" />
   </Folder>
-  <Project Path="Apinventario.App/Apinventario.App.csproj" />
+  <Project Path="Apinventario.App/Apinventario.App.csproj">
+    <Deploy Solution="Debug|*" />
+  </Project>
   <Project Path="TPN°5-Movil/TPN°5-Movil.csproj" />
 </Solution>
