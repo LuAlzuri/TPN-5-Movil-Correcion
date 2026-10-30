@@ -12,12 +12,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Categoria> Categorias => Set<Categoria>();
     public DbSet<Proveedor> Proveedores => Set<Proveedor>();
     public DbSet<Producto> Productos => Set<Producto>();
-    public DbSet<Imagen> Imagenes => Set<Imagen>();
-    public DbSet<Ingreso> Ingresos => Set<Ingreso>();
-    public DbSet<DetalleIngreso> DetallesIngreso => Set<DetalleIngreso>();
-    public DbSet<Salida> Salidas => Set<Salida>();
-    public DbSet<DetalleSalida> DetallesSalida => Set<DetalleSalida>();
+        public DbSet<Imagen> Imagenes => Set<Imagen>();
 
+        public DbSet<Ingreso> Ingresos => Set<Ingreso>();
+        public DbSet<DetalleIngreso> DetallesIngreso => Set<DetalleIngreso>();
+        public DbSet<Salida> Salidas => Set<Salida>();
+        public DbSet<DetalleSalida> DetallesSalida => Set<DetalleSalida>();
+        public DbSet<AuditoriaAccion> AuditoriaAcciones => Set<AuditoriaAccion>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -148,6 +149,23 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasQueryFilter(x => !x.Salida.Eliminado);
         });
         // Preserve historical references; deletion is a business operation, never a cascade.
+        modelBuilder.Entity<AuditoriaAccion>(entity =>
+        {
+            entity.ToTable("AuditoriaAcciones");
+            entity.HasKey(a => a.Id);
+            entity.Property(a => a.UsuarioId).IsRequired();
+            entity.Property(a => a.Accion).IsRequired().HasMaxLength(50);
+            entity.Property(a => a.Entidad).IsRequired().HasMaxLength(50);
+            entity.Property(a => a.EntidadId).HasMaxLength(50);
+            entity.Property(a => a.UsuarioEmail).HasMaxLength(150);
+            entity.Property(a => a.Ip).HasMaxLength(45);
+            entity.Property(a => a.Observacion).HasMaxLength(250);
+            entity.Property(a => a.FechaUtc).IsRequired();
+            entity.HasIndex(a => a.FechaUtc);
+            entity.HasIndex(a => new { a.Entidad, a.EntidadId });
+            entity.HasIndex(a => new { a.UsuarioId, a.FechaUtc });
+        });
+
         foreach (var fk in modelBuilder.Model.GetEntityTypes().SelectMany(x => x.GetForeignKeys()))
             fk.DeleteBehavior = DeleteBehavior.Restrict;
     }

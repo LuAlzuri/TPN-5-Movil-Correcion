@@ -1,0 +1,9 @@
+C:\Program Files\dotnet\sdk\10.0.401\Sdks\Microsoft.NET.Sdk\targets\Microsoft.PackageDependencyResolution.targets(266,5): error NETSDK1004: No se encuentra el archivo de recursos 'C:\Users\Administrator\source\repos\TP5-Movil-Correccion\TPN-5-Movil-Correcion\TPN°5-Movil\obj\project.assets.json'. Ejecute una restauración de paquetes de NuGet para generar el archivo. [C:\Users\Administrator\source\repos\TP5-Movil-Correccion\TPN-5-Movil-Correcion\TPN°5-Movil\TPN°5-Movil.csproj]
+
+ERROR al compilar.
+
+C:\Program Files\dotnet\sdk\10.0.401\Sdks\Microsoft.NET.Sdk\targets\Microsoft.PackageDependencyResolution.targets(266,5): error NETSDK1004: No se encuentra el archivo de recursos 'C:\Users\Administrator\source\repos\TP5-Movil-Correccion\TPN-5-Movil-Correcion\TPN°5-Movil\obj\project.assets.json'. Ejecute una restauración de paquetes de NuGet para generar el archivo. [C:\Users\Administrator\source\repos\TP5-Movil-Correccion\TPN-5-Movil-Correcion\TPN°5-Movil\TPN°5-Movil.csproj]
+    0 Advertencia(s)
+    1 Errores
+
+Tiempo transcurrido 00:00:00.56
