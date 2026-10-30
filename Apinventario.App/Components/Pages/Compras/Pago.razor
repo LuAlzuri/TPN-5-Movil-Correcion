@@ -126,7 +126,7 @@ else
         error = null;
         try
         {
-            await Sales.ConfirmarClienteAsync(sale.Id, lifetime.Token);
+            await Sales.ConfirmarClienteAsync(sale.Id, metodo, lifetime.Token);
             CarritoState.SalidaId = null;
             Navigation.NavigateTo($"/compras/pedidos/{sale.Id}?enviado=true");
         }

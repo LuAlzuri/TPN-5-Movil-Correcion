@@ -113,7 +113,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             {
                 t.HasCheckConstraint("CK_Salida_Cliente", "([ConfirmarXCliente] = 0 AND [FechaConfirmacionCliente] IS NULL) OR ([ConfirmarXCliente] = 1 AND [FechaConfirmacionCliente] IS NOT NULL)");
                 t.HasCheckConstraint("CK_Salida_Empleado", "([ConfirmarXEmpleado] = 0 AND [UsuarioConfirmacionId] IS NULL AND [FechaConfirmacionEmpleado] IS NULL) OR ([ConfirmarXEmpleado] = 1 AND [ConfirmarXCliente] = 1 AND [UsuarioConfirmacionId] IS NOT NULL AND [FechaConfirmacionEmpleado] IS NOT NULL)");
+                t.HasCheckConstraint("CK_Salida_MedioPago", "[MedioPago] IS NULL OR [MedioPago] IN ('Tarjeta', 'Transferencia', 'Efectivo')");
             });
+            e.Property(x => x.MedioPago).HasMaxLength(20);
             e.HasOne(x => x.Cliente).WithMany(x => x.Salidas).HasForeignKey(x => x.ClienteId);
             e.HasOne(x => x.UsuarioConfirmacion).WithMany().HasForeignKey(x => x.UsuarioConfirmacionId);
             e.HasIndex(x => x.Fecha);

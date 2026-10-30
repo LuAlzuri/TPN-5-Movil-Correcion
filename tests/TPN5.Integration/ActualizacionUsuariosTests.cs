@@ -23,7 +23,7 @@ public sealed class ActualizacionUsuariosTests(SqlServerFixture sql)
     [Fact]
     public async Task Error_inesperado_se_registra_sin_exponer_credenciales_ni_archivos()
     {
-        await using var app = await sql.CreateApplicationAsync();
+        var app = await sql.CreateApplicationAsync();
         await app.LoginAdminAsync();
         await app.DatabaseAsync(db => db.Database.ExecuteSqlRawAsync(
             "ALTER TABLE Clientes ADD CONSTRAINT CK_TestErrorLog CHECK (Id < 0);"));
@@ -34,7 +34,14 @@ public sealed class ActualizacionUsuariosTests(SqlServerFixture sql)
         Assert.Equal("Error interno del servidor.", error.GetProperty("error").GetString());
         var files = Directory.GetFiles(app.Logs, "*.log");
         Assert.NotEmpty(files);
-        var content = string.Join("\n", files.Select(File.ReadAllText));
+        var content = string.Join("\n", files.Select(path =>
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }));
+        await app.StatusAsync(HttpMethod.Get, "/logs/" + Path.GetFileName(files[0]), HttpStatusCode.NotFound);
+        await app.DisposeAsync();
         Assert.DoesNotContain(app.Password, content);
         Assert.DoesNotContain(app.Admin.Token, content);
         using var entry = content.Split('\n', StringSplitOptions.RemoveEmptyEntries)
@@ -45,7 +52,6 @@ public sealed class ActualizacionUsuariosTests(SqlServerFixture sql)
         Assert.Equal(app.Admin.Id.ToString(), properties.GetProperty("UsuarioId").GetString());
         Assert.False(string.IsNullOrWhiteSpace(properties.GetProperty("TraceId").GetString()));
         Assert.Contains("SqlException", entry.RootElement.GetProperty("Exception").GetString());
-        await app.StatusAsync(HttpMethod.Get, "/logs/" + Path.GetFileName(files[0]), HttpStatusCode.NotFound);
     }
 
     [Fact]

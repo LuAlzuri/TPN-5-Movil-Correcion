@@ -45,8 +45,11 @@ public sealed class CarritoClient(ApiClient api)
     public Task QuitarDetalleAsync(int id, int detalleId, CancellationToken ct = default) =>
         api.SendNoContentAsync(HttpMethod.Delete, $"api/salidas/{id}/detalles/{detalleId}", ct: ct);
 
-    public Task<SalidaDto> ConfirmarClienteAsync(int id, CancellationToken ct = default) =>
-        api.SendJsonAsync<SalidaDto>(HttpMethod.Post, $"api/salidas/{id}/confirmar-cliente", ct: ct);
+    public Task<SalidaDto> ConfirmarClienteAsync(int id, string? medioPago = null, CancellationToken ct = default) =>
+        api.SendJsonAsync<SalidaDto>(HttpMethod.Post, $"api/salidas/{id}/confirmar-cliente", new { medioPago }, ct);
+
+    public Task<DownloadedFile> ComprobanteAsync(int id, CancellationToken ct = default) =>
+        api.DownloadAsync($"api/salidas/{id}/comprobante", ct);
 
     public Task<SalidaDto> ConfirmarAsync(int id, CancellationToken ct = default) =>
         api.SendJsonAsync<SalidaDto>(HttpMethod.Post, $"api/salidas/{id}/confirmar", ct: ct);

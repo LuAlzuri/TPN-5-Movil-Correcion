@@ -9,6 +9,14 @@ public record SalidaResponse(int Id, int ClienteId, int? UsuarioConfirmacionId, 
     DateTime? FechaConfirmacionEmpleado, List<DetalleSalidaResponse> Detalles, decimal Total)
 {
     public bool Eliminado { get; init; }
+    public string? MedioPago { get; init; }
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class ConfirmarClienteRequest
+{
+    [MaxLength(20)]
+    public string? MedioPago { get; init; }
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

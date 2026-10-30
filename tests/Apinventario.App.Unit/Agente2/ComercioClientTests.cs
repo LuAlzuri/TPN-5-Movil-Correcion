@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Apinventario.App.Models.Comercio;
@@ -122,6 +123,47 @@ public sealed class ComercioClientTests
         });
 
         Assert.Null(await new CarritoClient(f.Api).EditarDetalleAsync(5, 8, 0));
+    }
+
+    [Fact]
+    public async Task ClientConfirmationSendsPaymentMethod()
+    {
+        using var f = new Fixture(async r =>
+        {
+            Assert.Equal(HttpMethod.Post, r.Method);
+            Assert.Equal("/api/salidas/5/confirmar-cliente", r.RequestUri!.AbsolutePath);
+            using var body = JsonDocument.Parse(await r.Content!.ReadAsStringAsync());
+            Assert.Equal("Tarjeta", body.RootElement.GetProperty("medioPago").GetString());
+            return Json(Sale(5, client: true));
+        });
+
+        var sale = await new CarritoClient(f.Api).ConfirmarClienteAsync(5, "Tarjeta");
+        Assert.True(sale.ConfirmarXCliente);
+    }
+
+    [Fact]
+    public async Task ReceiptRequestUsesSaleRouteAndAcceptsPdf()
+    {
+        using var f = new Fixture(r =>
+        {
+            Assert.Equal(HttpMethod.Get, r.Method);
+            Assert.Equal("/api/salidas/5/comprobante", r.RequestUri!.AbsolutePath);
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(Encoding.ASCII.GetBytes("%PDF-1.4\ncomprobante"))
+            };
+            response.Content.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+            response.Content.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment")
+            {
+                FileNameStar = "comprobante-5.pdf"
+            };
+            return Task.FromResult(response);
+        });
+
+        var file = await new CarritoClient(f.Api).ComprobanteAsync(5);
+        Assert.Equal("application/pdf", file.MimeType);
+        Assert.Equal("comprobante-5.pdf", file.FileName);
+        Assert.StartsWith("%PDF-", Encoding.ASCII.GetString(file.Bytes));
     }
 
     [Fact]

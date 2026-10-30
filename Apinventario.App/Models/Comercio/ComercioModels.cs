@@ -68,7 +68,8 @@ public sealed record SalidaDto(
     DateTime? FechaConfirmacionEmpleado,
     List<DetalleSalidaDto> Detalles,
     decimal Total,
-    bool Eliminado);
+    bool Eliminado,
+    string? MedioPago = null);
 
 public sealed record DetalleIngresoDto(
     int Id,

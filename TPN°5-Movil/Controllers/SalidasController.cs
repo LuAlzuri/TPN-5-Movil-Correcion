@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using TPN_5_MOVIL.DTOs;
 using TPN_5_MOVIL.Entities;
 using TPN_5_MOVIL.Security;
@@ -10,7 +11,7 @@ namespace TPN_5_MOVIL.Controllers;
 [ApiController]
 [Route("api/salidas")]
 [Authorize(Roles = GruposRoles.Todos)]
-public class SalidasController(SalidaService salidas) : ControllerBase
+public class SalidasController(SalidaService salidas, IReportePdfService pdf) : ControllerBase
 {
     private int? PropietarioId => User.IsInRole(Usuario.RolCliente) ? User.ObtenerClienteId() : null;
 
@@ -29,6 +30,14 @@ public class SalidasController(SalidaService salidas) : ControllerBase
     [HttpGet("{id:int}/detalles/{detalleId:int}")]
     public async Task<ActionResult<DetalleSalidaResponse>> GetDetalle(int id, int detalleId, CancellationToken cancellationToken) =>
         Ok(await salidas.ConsultarDetalleAsync(id, detalleId, PropietarioId, cancellationToken));
+
+    [HttpGet("{id:int}/comprobante")]
+    public async Task<IActionResult> Comprobante(int id, CancellationToken cancellationToken)
+    {
+        var comprobante = await salidas.ObtenerComprobanteAsync(id, PropietarioId, cancellationToken);
+        return File(pdf.GenerarComprobante(comprobante, new ReporteContexto(DateTimeOffset.UtcNow)),
+            "application/pdf", $"comprobante-{id}.pdf");
+    }
 
     [HttpPost]
     [Authorize(Roles = Usuario.RolCliente)]
@@ -67,8 +76,10 @@ public class SalidasController(SalidaService salidas) : ControllerBase
 
     [HttpPost("{id:int}/confirmar-cliente")]
     [Authorize(Roles = Usuario.RolCliente)]
-    public async Task<ActionResult<SalidaResponse>> ConfirmarCliente(int id, CancellationToken cancellationToken) =>
-        Ok(await salidas.ConfirmarClienteAsync(id, User.ObtenerClienteId(), cancellationToken));
+    public async Task<ActionResult<SalidaResponse>> ConfirmarCliente(int id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ConfirmarClienteRequest? request,
+        CancellationToken cancellationToken) =>
+        Ok(await salidas.ConfirmarClienteAsync(id, User.ObtenerClienteId(), request?.MedioPago, cancellationToken));
 
     [HttpPost("{id:int}/confirmar")]
     [Authorize(Roles = GruposRoles.Personal)]

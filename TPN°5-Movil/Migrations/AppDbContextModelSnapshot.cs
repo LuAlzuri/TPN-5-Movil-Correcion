@@ -430,6 +430,10 @@ namespace TPN_5_MOVIL.Migrations
                     b.Property<DateTime?>("FechaConfirmacionEmpleado")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("MedioPago")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<string>("Observaciones")
                         .HasColumnType("nvarchar(max)");
 
@@ -449,6 +453,8 @@ namespace TPN_5_MOVIL.Migrations
                             t.HasCheckConstraint("CK_Salida_Cliente", "([ConfirmarXCliente] = 0 AND [FechaConfirmacionCliente] IS NULL) OR ([ConfirmarXCliente] = 1 AND [FechaConfirmacionCliente] IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_Salida_Empleado", "([ConfirmarXEmpleado] = 0 AND [UsuarioConfirmacionId] IS NULL AND [FechaConfirmacionEmpleado] IS NULL) OR ([ConfirmarXEmpleado] = 1 AND [ConfirmarXCliente] = 1 AND [UsuarioConfirmacionId] IS NOT NULL AND [FechaConfirmacionEmpleado] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_Salida_MedioPago", "[MedioPago] IS NULL OR [MedioPago] IN ('Tarjeta', 'Transferencia', 'Efectivo')");
                         });
                 });
 

@@ -4,12 +4,13 @@
 @inject CatalogoClient Catalogo
 @inject CarritoState CarritoState
 @inject ConfirmService Confirm
+@inject FileService Files
 @inject NavigationManager Navigation
 @inject AppErrorLogger Logger
 @implements IDisposable
 
 <h1>Pedido #@Id</h1>
-<Feedback Busy="busy" Error="@error" Message="@message" />
+<Feedback Busy="@(busy || pdfBusy)" Error="@error" Message="@message" />
 
 @if (sale is null)
 {
@@ -30,6 +31,11 @@ else
             <dd>@sale.Total.ToString("C")</dd>
             <dt>Productos</dt>
             <dd>@sale.Detalles.Count</dd>
+            @if (!string.IsNullOrWhiteSpace(sale.MedioPago))
+            {
+                <dt>Medio de pago</dt>
+                <dd>@sale.MedioPago</dd>
+            }
             <dt>Confirmación del cliente</dt>
             <dd>@FechaOpcional(sale.FechaConfirmacionCliente)</dd>
             <dt>Confirmación operativa</dt>
@@ -84,11 +90,25 @@ else
         </div>
     </section>
 
+    @if (sale.ConfirmarXCliente && !sale.Eliminado)
+    {
+        <p class="muted">El comprobante no es fiscal y se genera en el momento con el estado actual del pedido.</p>
+    }
+
     <div class="actions">
         <a class="btn btn-outline-secondary" href="/compras/pedidos">Volver a mis pedidos</a>
         @if (PedidoEstado.EsBorradorActivo(sale))
         {
             <button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="EditDraft">Editar carrito</button>
+        }
+        @if (sale.ConfirmarXCliente && !sale.Eliminado)
+        {
+            <button type="button" class="btn btn-outline-primary" disabled="@(busy || pdfBusy)" @onclick="() => ComprobanteAsync(false)">
+                Ver / imprimir comprobante
+            </button>
+            <button type="button" class="btn btn-outline-secondary" disabled="@(busy || pdfBusy)" @onclick="() => ComprobanteAsync(true)">
+                Compartir comprobante
+            </button>
         }
         @if (!sale.ConfirmarXEmpleado && !sale.Eliminado)
         {
@@ -107,6 +127,7 @@ else
     string? error;
     string? message;
     bool busy;
+    bool pdfBusy;
     CancellationTokenSource lifetime = new();
 
     protected override Task OnInitializedAsync()
@@ -169,6 +190,30 @@ else
         if (sale is null) return;
         CarritoState.SalidaId = sale.Id;
         Navigation.NavigateTo("/compras/carrito");
+    }
+
+    async Task ComprobanteAsync(bool compartir)
+    {
+        if (sale is null || pdfBusy) return;
+        pdfBusy = true;
+        error = null;
+        message = null;
+        try
+        {
+            var file = await Sales.ComprobanteAsync(sale.Id, lifetime.Token);
+            if (compartir)
+                await Files.SharePdfAsync(file, "Compartir comprobante");
+            else if (!await Files.OpenPdfAsync(file, "Comprobante de compra"))
+                message = "No hay una aplicación disponible para abrir el PDF. Probá con Compartir comprobante.";
+        }
+        catch (OperationCanceledException) { }
+        catch (ApiFailure ex) { error = "No se pudo obtener el comprobante. " + ex.Message; }
+        catch
+        {
+            error = "No se pudo obtener el comprobante.";
+            await Logger.WriteAsync("Network");
+        }
+        finally { pdfBusy = false; }
     }
 
     ProductoDto? ProductoDe(int id) => products.GetValueOrDefault(id);
