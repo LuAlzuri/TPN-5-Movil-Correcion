@@ -23,7 +23,7 @@ public sealed class RegisterRequest
     [Required, MinLength(12), MaxLength(128)]
     public string Password { get; init; } = string.Empty;
     [Required]
-    public string Rol { get; init; } = string.Empty;
+    public string Rol { get; init; } = "Cliente";
     public DateOnly? FechaIngreso { get; init; }
     [MaxLength(50)]
     public string? Telefono { get; init; }

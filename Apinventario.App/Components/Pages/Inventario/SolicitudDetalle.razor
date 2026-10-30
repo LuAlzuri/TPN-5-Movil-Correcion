@@ -99,7 +99,7 @@ else
 
     bool IsAdmin => Session.CurrentUser?.Rol == "Administrador";
     bool IsEmployee => Session.CurrentUser?.Rol == "Empleado";
-    bool CanAccept => IsEmployee && sale is not null && sale.ConfirmarXCliente &&
+    bool CanAccept => (IsAdmin || IsEmployee) && sale is not null && sale.ConfirmarXCliente &&
         !sale.ConfirmarXEmpleado && !sale.Eliminado;
 
     protected override async Task OnInitializedAsync()

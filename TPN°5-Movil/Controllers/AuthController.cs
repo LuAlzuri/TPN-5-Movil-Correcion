@@ -33,9 +33,13 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    [Authorize(Roles = Usuario.RolAdministrador)]
+    [AllowAnonymous]
     public async Task<ActionResult<UsuarioDto>> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
+        if (request.Rol != Usuario.RolCliente && !User.IsInRole(Usuario.RolAdministrador))
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { error = "El registro público solo permite crear clientes." });
+
         var usuario = await _authService.RegisterAsync(request, cancellationToken);
         return CreatedAtAction(nameof(UsuariosController.GetById), "Usuarios", new { id = usuario.Id }, usuario);
     }
